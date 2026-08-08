@@ -15073,8 +15073,8 @@ const PROFILE_UNLOCK_GROUPS = {
 };
 const PLAYER_AVATAR_CACHE = new Map();
 const SUPABASE_CONFIG = {
-  url: "",
-  anonKey: "",
+  url: "https://ahfghscpeyzrsrvknfcd.supabase.co",
+  anonKey: "sb_publishable_2ZRpuT0DZ_IDWGGGwnglUw_3baHj7d-",
   table: "scores",
   challengeTable: "challenges",
   challengeStatsTable: "challenge_stats",
