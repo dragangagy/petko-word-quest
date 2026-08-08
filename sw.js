@@ -1,4 +1,4 @@
-const CACHE_NAME = "pwq-cache-v1";
+const CACHE_NAME = "pwq-cache-v2";
 
 const ASSETS = [
   "./",
@@ -196,8 +196,7 @@ const ASSETS = [
   "./medal-success-rate.png",
   "./medal-streak.png",
   "./medal-active-days.png",
-  "./medal-challenge-score.png",
-  "./medal-lector.png"
+  "./medal-challenge-score.png"
 ];
 
 // Instalacija

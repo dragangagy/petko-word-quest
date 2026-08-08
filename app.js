@@ -14923,7 +14923,6 @@ const WEEKEND_WITCH_PROMPT_KEY = "pwq-weekend-witch-prompt-v1";
 const WEEKEND_WITCH_CHALLENGE_BONUS_KEY = "pwq-weekend-witch-challenge-bonus-v1";
 const WEEKEND_WITCH_CHALLENGE_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const WEEKEND_WITCH_AVATAR_IDS = ["female-41", "female-42", "female-43", "female-44", "female-45"];
-const LECTOR_STATS_KEY = "pwq-lector-stats-v1";
 const USED_WORDS_KEY = "pwq-used-words-v2";
 const WORD_DECK_KEY = "pwq-word-deck-v1";
 const ONLINE_WORDS_KEY = "pwq-online-words-v1";
@@ -15081,13 +15080,9 @@ const SUPABASE_CONFIG = {
   challengeScoreStatsTable: "challenge_score_stats",
   weekendResultsTable: "weekend_results",
   normalStatsTable: "normal_stats",
-  lectorStatsTable: "lector_stats",
   playersTable: "players",
-  wordReportsTable: "word_reports",
   wordsTable: "words"
 };
-
-const WORD_INFO = {};
 
 const boardsEl = document.querySelector("#boards");
 const keyboardEl = document.querySelector("#keyboard");
@@ -15118,7 +15113,6 @@ const normalStatsEl = document.querySelector("#normalStats");
 const statusLogoEl = document.querySelector(".status-logo");
 const wordRevealEl = document.querySelector("#wordReveal");
 const wordRevealTextEl = document.querySelector("#wordRevealText");
-const wordInfoButton = document.querySelector("#wordInfoButton");
 const wordModal = document.querySelector("#wordModal");
 const wordModalTitle = document.querySelector("#wordModalTitle");
 const wordModalWord = document.querySelector("#wordModalWord");
@@ -16064,170 +16058,8 @@ function playersTable() {
   return SUPABASE_CONFIG.playersTable || "players";
 }
 
-function wordReportsTable() {
-  return SUPABASE_CONFIG.wordReportsTable || "word_reports";
-}
-
-function lectorStatsTable() {
-  return SUPABASE_CONFIG.lectorStatsTable || "lector_stats";
-}
-
 function wordsTable() {
   return SUPABASE_CONFIG.wordsTable || "words";
-}
-
-function emptyLectorStats() {
-  return { total: 0, add: 0, remove: 0, updated_at: "" };
-}
-
-function loadLectorStats() {
-  try {
-    return { ...emptyLectorStats(), ...JSON.parse(localStorage.getItem(LECTOR_STATS_KEY) || "{}") };
-  } catch {
-    return emptyLectorStats();
-  }
-}
-
-function saveLectorStats(stats) {
-  localStorage.setItem(LECTOR_STATS_KEY, JSON.stringify(stats));
-}
-
-async function submitLectorStats(stats = loadLectorStats()) {
-  if (!supabaseConfigured()) return false;
-  const response = await fetch(supabaseUrl(`${lectorStatsTable()}?on_conflict=device_id`), {
-    method: "POST",
-    headers: supabaseHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }),
-    body: JSON.stringify({
-      nickname: loadPlayerName() || "Player",
-      device_id: deviceId(),
-      total: Number(stats.total) || 0,
-      add_count: Number(stats.add) || 0,
-      remove_count: Number(stats.remove) || 0,
-      updated_at: stats.updated_at || new Date().toISOString()
-    })
-  });
-  return response.ok;
-}
-
-function bumpLectorStats(action) {
-  const stats = loadLectorStats();
-  stats.total += 1;
-  if (action === "add") stats.add += 1;
-  if (action === "remove") stats.remove += 1;
-  stats.updated_at = new Date().toISOString();
-  saveLectorStats(stats);
-  submitLectorStats(stats).catch(() => {});
-}
-
-async function submitWordReport(word, action, source) {
-  if (!supabaseConfigured() || !word) return false;
-  const response = await fetch(supabaseUrl(wordReportsTable()), {
-    method: "POST",
-    headers: supabaseHeaders({ Prefer: "return=minimal" }),
-    body: JSON.stringify({
-      word,
-      action,
-      source,
-      nickname: loadPlayerName() || "Player",
-      device_id: deviceId()
-    })
-  });
-  if (response.ok) bumpLectorStats(action);
-  return response.ok;
-}
-
-async function fetchWordReportsRows() {
-  if (!supabaseConfigured()) return [];
-  const query = [
-    "select=created_at,word,action,nickname",
-    "order=created_at.desc",
-    "limit=1000"
-  ].join("&");
-  const response = await fetch(supabaseUrl(`${wordReportsTable()}?${query}`), {
-    headers: supabaseHeaders()
-  });
-  if (!response.ok) return [];
-  const rows = await response.json();
-  return Array.isArray(rows) ? rows : [];
-}
-
-async function fetchLectorStatsRows() {
-  if (!supabaseConfigured()) return [];
-  const query = [
-    "select=nickname,total,add_count,remove_count,updated_at",
-    "order=updated_at.desc",
-    "limit=1000"
-  ].join("&");
-  const response = await fetch(supabaseUrl(`${lectorStatsTable()}?${query}`), {
-    headers: supabaseHeaders()
-  });
-  if (!response.ok) return [];
-  const rows = await response.json();
-  return Array.isArray(rows) ? rows : [];
-}
-
-function lectorStats(rows = []) {
-  const byName = new Map();
-  rows
-    .filter((row) => row.action === "add" || row.action === "remove")
-    .forEach((row) => {
-      const nickname = (row.nickname || "Player").trim() || "Player";
-      if (!byName.has(nickname)) {
-        byName.set(nickname, { nickname, total: 0, add: 0, remove: 0, lastAt: "" });
-      }
-      const entry = byName.get(nickname);
-      entry.total += 1;
-      if (row.action === "add") entry.add += 1;
-      if (row.action === "remove") entry.remove += 1;
-      if (!entry.lastAt || Date.parse(row.created_at || "") > Date.parse(entry.lastAt || "")) {
-        entry.lastAt = row.created_at || "";
-      }
-    });
-  return [...byName.values()];
-}
-
-function lectorStatsPersistent(rows = []) {
-  const byName = new Map();
-  rows.forEach((row) => {
-    const hasTotal = row.total !== undefined || row.add_count !== undefined || row.remove_count !== undefined;
-    if (!hasTotal && row.action !== "add" && row.action !== "remove") return;
-    const nickname = (row.nickname || "Player").trim() || "Player";
-    if (!byName.has(nickname)) {
-      byName.set(nickname, { nickname, total: 0, add: 0, remove: 0, lastAt: "" });
-    }
-    const entry = byName.get(nickname);
-    if (hasTotal) {
-      entry.total += Number(row.total) || 0;
-      entry.add += Number(row.add_count) || 0;
-      entry.remove += Number(row.remove_count) || 0;
-    } else {
-      entry.total += 1;
-      if (row.action === "add") entry.add += 1;
-      if (row.action === "remove") entry.remove += 1;
-    }
-    const lastAt = row.updated_at || row.created_at || "";
-    if (!entry.lastAt || Date.parse(lastAt || "") > Date.parse(entry.lastAt || "")) {
-      entry.lastAt = lastAt;
-    }
-  });
-  return [...byName.values()];
-}
-
-async function fetchWordMeaning(word) {
-  if (!word) return "";
-  if (WORD_INFO[word]) return WORD_INFO[word];
-  if (!supabaseConfigured()) return "";
-
-  const query = `${wordsTable()}?select=meaning&word=eq.${encodeURIComponent(word)}&active=eq.true&limit=1`;
-  const response = await fetch(supabaseUrl(query), {
-    headers: supabaseHeaders()
-  });
-  if (!response.ok) return "";
-
-  const rows = await response.json();
-  const meaning = String(rows?.[0]?.meaning || "").trim();
-  if (meaning) WORD_INFO[word] = meaning;
-  return meaning;
 }
 
 function normalizeOnlineWordRows(rows = []) {
@@ -16264,9 +16096,6 @@ function applyOnlineWords(rows = [], cache = false) {
   WORDS = [...mergedWords.values()].sort((left, right) => left.localeCompare(right, "en"));
   WORD_SET = new Set(WORDS);
   onlineWordsReady = true;
-  normalizedRows.forEach((row) => {
-    if (row.meaning) WORD_INFO[row.word] = row.meaning;
-  });
   saveWordDeck(loadWordDeck());
   if (cache) {
     localStorage.setItem(ONLINE_WORDS_KEY, JSON.stringify({
@@ -17418,7 +17247,7 @@ function renderChallengePanelWords(row, solvedFlags = null) {
     : (sameChallengeWords(words, targets) && solvedAt.length === words.length
       ? solvedAt.map(Boolean)
       : null);
-  challengeStatusEl.append(createChallengeWordList(words, { withInfo: true, solvedFlags: flags }));
+  challengeStatusEl.append(createChallengeWordList(words, { solvedFlags: flags }));
 }
 
 async function fetchChallenge(code) {
@@ -17946,7 +17775,7 @@ function challengeAvatarElement(name) {
 
 function createChallengeWordList(words = [], options = {}) {
   const list = document.createElement("div");
-  list.className = `challenge-result-word-list${options.withInfo ? " with-info" : ""}`;
+  list.className = "challenge-result-word-list";
   const solvedFlags = Array.isArray(options.solvedFlags) ? options.solvedFlags : null;
   normalizeChallengeWords(words).forEach((target, index) => {
     const solved = solvedFlags ? Boolean(solvedFlags[index]) : true;
@@ -17961,18 +17790,6 @@ function createChallengeWordList(words = [], options = {}) {
       word.append(tile);
     });
     chip.append(word);
-    if (options.withInfo) {
-      const info = document.createElement("button");
-      info.className = "mini-word-info";
-      info.type = "button";
-      info.textContent = "?";
-      info.setAttribute("aria-label", `Word meaning ${displayWord(target)}`);
-      info.addEventListener("click", (event) => {
-        event.stopPropagation();
-        showExistingWordReview(target);
-      });
-      chip.append(info);
-    }
     list.append(chip);
   });
   if (!list.childElementCount) {
@@ -19709,8 +19526,6 @@ async function renamePlayerEverywhere(oldName, newName) {
     patchSupabaseRows(`${playersTable()}?device_id=eq.${encodeURIComponent(deviceId())}`, { nickname: newName }),
     patchSupabaseRows(`${SUPABASE_CONFIG.table}?nickname=eq.${oldFilter}`, { nickname: newName }),
     patchSupabaseRows(`${normalStatsTable()}?nickname=eq.${oldFilter}`, { nickname: newName }),
-    patchSupabaseRows(`${lectorStatsTable()}?nickname=eq.${oldFilter}`, { nickname: newName }),
-    patchSupabaseRows(`${wordReportsTable()}?nickname=eq.${oldFilter}`, { nickname: newName }),
     patchSupabaseRows(`${challengeTable()}?creator=eq.${oldFilter}`, { creator: newName }),
     patchSupabaseRows(`${challengeTable()}?opponent=eq.${oldFilter}`, { opponent: newName }),
     callSupabaseRpc("rename_challenge_stats_player", { old_name: oldName, new_name: newName })
@@ -20406,13 +20221,7 @@ function renderBoards() {
         tile.textContent = letter;
         word.append(tile);
       });
-      const info = document.createElement("button");
-      info.className = "mini-word-info";
-      info.type = "button";
-      info.textContent = "?";
-      info.setAttribute("aria-label", `Word meaning ${displayWord(target)}`);
-      info.addEventListener("click", () => showExistingWordReview(target));
-      title.append(word, info);
+      title.append(word);
       (collapsedStack || boardsEl).append(fragment);
       return;
     }
@@ -20462,13 +20271,7 @@ function renderSolutionsPanel(show) {
       tile.textContent = letter;
       word.append(tile);
     });
-    const info = document.createElement("button");
-    info.className = "mini-word-info";
-    info.type = "button";
-    info.textContent = "?";
-    info.setAttribute("aria-label", `Word meaning ${displayWord(target)}`);
-    info.addEventListener("click", () => showExistingWordReview(target));
-    chip.append(word, info);
+    chip.append(word);
     solutionsPanelEl.append(chip);
   });
 }
@@ -20506,72 +20309,6 @@ function showWordModal({ title, word, text, reviewText = "", buttons, modalVaria
   setWordModalButtons(buttons);
   wordModal.hidden = false;
   document.body.dataset.wordModalOpen = "true";
-}
-
-function wordMeaningText(word) {
-  return WORD_INFO[word] || "A meaning for this word has not been added yet. A short explanation will appear here once it is in the database.";
-}
-
-function showExistingWordReview(word) {
-  const fallbackText = wordMeaningText(word);
-  showWordModal({
-    title: "Word meaning",
-    word,
-    text: fallbackText,
-    reviewText: "Is this word unnecessary, inappropriate, or incorrect and should it be removed?",
-    buttons: [
-      {
-        label: "Yes",
-        tone: "danger",
-        onClick: () => {
-          submitWordReport(word, "remove", "normal_answer").catch(() => {});
-          closeWordModal();
-          messageEl.textContent = "Report sent.";
-        }
-      },
-      {
-        label: "No",
-        tone: "success",
-        onClick: () => {
-          closeWordModal();
-        }
-      }
-    ]
-  });
-
-  fetchWordMeaning(word)
-    .then((meaning) => {
-      if (!meaning || !wordModal || wordModal.hidden || wordModalWord.textContent !== displayWord(word)) return;
-      wordModalText.textContent = meaning;
-    })
-    .catch(() => {});
-}
-
-function showMissingWordReview(word) {
-  showWordModal({
-    title: "Word not in the list",
-    word,
-    text: "This word is not in the database. Do you think it should be added to the word list?",
-    buttons: [
-      {
-        label: "Yes",
-        tone: "success",
-        onClick: () => {
-          submitWordReport(word, "add", "missing_guess").catch(() => {});
-          closeWordModal();
-          messageEl.textContent = "Suggestion sent.";
-        }
-      },
-      {
-        label: "No",
-        tone: "danger",
-        onClick: () => {
-          closeWordModal();
-          messageEl.textContent = "Continue.";
-        }
-      }
-    ]
-  });
 }
 
 function renderWordReveal() {
@@ -20648,11 +20385,9 @@ function submitGuess() {
   }
 
   if (!isKnownWord(current)) {
-    const missingWord = current;
     current = "";
-    messageEl.textContent = "Not in the word list.";
+    messageEl.textContent = "Not in word list.";
     playPetkoMoment("unknown", { force: true });
-    showMissingWordReview(missingWord);
     render();
     saveNormalProgress();
     return;
@@ -21489,11 +21224,10 @@ async function renderHallOfFame() {
   hallPanelEl.hidden = gameType !== "hall";
   renderHallLoading();
   try {
-    const [scoreRows, challengeRows, normalRows, lectorRows, challengeScoreRows, challengeStatsRows] = await Promise.all([
+    const [scoreRows, challengeRows, normalRows, challengeScoreRows, challengeStatsRows] = await Promise.all([
       fetchOnlineLeaderboard(),
       fetchChallengeHistory(),
       fetchNormalStatsRows(),
-      fetchLectorStatsRows(),
       fetchChallengeScoreStatsRows().catch(() => []),
       fetchChallengeStatsRows().catch(() => [])
     ]);
@@ -21507,21 +21241,6 @@ async function renderHallOfFame() {
       ? onlineChallengeScoreRows
       : challengeStrongScoreRows(challengeRowsSafe);
     const normalLeaders = normalSuccessRows(Array.isArray(normalRows) ? normalRows : []);
-    const localLector = loadLectorStats();
-    const onlineLectorRows = Array.isArray(lectorRows) ? lectorRows : [];
-    const localLectorName = loadPlayerName() || "Player";
-    const hasOnlineLector = onlineLectorRows.some((row) => String(row.nickname || "").trim() === localLectorName);
-    const localLectorRows = localLector.total && !hasOnlineLector ? [{
-      nickname: localLectorName,
-      total: localLector.total,
-      add_count: localLector.add,
-      remove_count: localLector.remove,
-      updated_at: localLector.updated_at
-    }] : [];
-    const lectorLeaders = lectorStatsPersistent([
-      ...onlineLectorRows,
-      ...localLectorRows
-    ]);
     const playerRows = leaderboard.map((row) => row);
     const totalScoreLeaders = playerRows.filter((row) => Number(row.attempts) >= 5);
     const rawScores = bestDailyScoreRows(rows.map((row) => ({
@@ -21545,8 +21264,7 @@ async function renderHallOfFame() {
       medalEntry("Strongest challenge score", challengeStrongLeaders, (row) => row.best, "", "medal-challenge-score.png", "bestAt", "Uses the largest point margin by which a player won a valid challenge. If the opponent surrenders, does not finish, or has fewer than 10 played challenges, that result is excluded. When a player posts the same best score multiple times, it shows as 30/2, 30/3 and ranks above a single matching score.", {
         sortFn: (row) => (Number(row.best) || 0) * 1000 + (Number(row.bestCount) || 0),
         displayFn: (row) => `${formatScore(row.best)}/${formatScore(row.bestCount || 1)}`
-      }),
-      medalEntry("Lector", lectorLeaders, (row) => row.total, " reports", "medal-lector.png", "lastAt", "Sums accepted word reports for adding and removing words from the database.")
+      })
     ];
 
     hallGridEl.innerHTML = "";
@@ -22034,12 +21752,6 @@ if (hallModalClose) {
 if (hallModal) {
   hallModal.addEventListener("click", (event) => {
     if (event.target === hallModal) closeHallModal();
-  });
-}
-
-if (wordInfoButton) {
-  wordInfoButton.addEventListener("click", () => {
-    if (targets[0]) showExistingWordReview(targets[0]);
   });
 }
 
