@@ -1,32 +1,34 @@
-# Petko
+# Petko Word Quest
 
-Mobile-first Serbian Cyrillic word game.
+Mobile-first English 5-letter word game for the US market.
+
+Independent from the Serbian Petko app. Same gameplay systems (Classic, Competitive, Challenge, Medals), new English word list, QWERTY keyboard, and a separate Supabase project.
 
 ## GitHub Pages
 
 Publish this folder as a static site. The app works as a PWA and can be added to a phone home screen.
 
-Required files are already in this folder:
+Required files:
 
 - `index.html`
 - `styles.css`
 - `app.js`
 - `manifest.webmanifest`
 - `sw.js`
-- `logo-cut.png`
-- `logo-icon.png`
+- image / avatar assets in this folder
 
-## Supabase
+## Supabase (new project)
 
-Run `supabase-schema.sql` in the Supabase SQL editor.
+Create a **new** Supabase project for Petko Word Quest. Do not reuse the Serbian Petko project.
 
-For starter word explanations, run `word-meanings-seed.sql` after the schema.
-
-Then set these values in `app.js`:
+1. Run `supabase-schema.sql` in the SQL editor.
+2. Run scheduled SQL helpers under `sql/` as needed.
+3. Seed English words into `public.words` (generate from the `WORDS` list in `app.js`, or load online words after the table is ready).
+4. Set these values in `app.js`:
 
 ```js
 const SUPABASE_CONFIG = {
-  url: "https://kfpyrajlxrucmrlhyvgr.supabase.co",
+  url: "https://YOUR_PROJECT.supabase.co",
   anonKey: "YOUR_SB_PUBLISHABLE_KEY",
   table: "scores",
   playersTable: "players"
@@ -35,10 +37,18 @@ const SUPABASE_CONFIG = {
 
 Without these values the app uses local results only.
 
-`players` keeps one row per nickname. `scores` stays as the result history, so old scores are not deleted when a player has multiple played days.
+## Local preview
 
-`scores.score` stores the daily score. The seasonal leaderboard is calculated in the app:
+Open `index.html` in a browser, or serve the folder with any static server.
 
-```text
-final = average_daily_score + min(played_days, 20) * 0.5 + min(streak, 10)
+```powershell
+# optional local server example
+npx --yes serve .
 ```
+
+## Notes
+
+- Word length is 5 letters (A–Z).
+- Keyboard is QWERTY.
+- Local storage keys use the `pwq-` prefix so they do not collide with Serbian Petko on the same device.
+- This is not financial advice or a gambling product; it is a word puzzle game.

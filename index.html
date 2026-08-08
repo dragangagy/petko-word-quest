@@ -1,36 +1,36 @@
 <!doctype html>
-<html lang="sr">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="Петко">
-    <title>Петко</title>
-    <link rel="manifest" href="manifest.webmanifest?v=105">
+    <meta name="apple-mobile-web-app-title" content="Petko Word Quest">
+    <title>Petko Word Quest</title>
+    <link rel="manifest" href="manifest.webmanifest?v=1">
     <link rel="icon" href="app-icon-store.png" type="image/png">
     <link rel="apple-touch-icon" href="app-icon-store.png">
-    <link rel="stylesheet" href="styles.css?v=226">
+    <link rel="stylesheet" href="styles.css?v=1">
   </head>
   <body>
-    <div class="petko-splash" id="petkoSplash" role="dialog" aria-label="Петко" aria-modal="true">
+    <div class="petko-splash" id="petkoSplash" role="dialog" aria-label="Petko Word Quest" aria-modal="true">
       <div class="petko-splash-card">
-        <img id="petkoSplashImage" src="petko-splash.png" alt="Петко">
-        <button id="petkoSplashButton" type="button">Играм</button>
+        <img id="petkoSplashImage" src="petko-splash.png" alt="Petko Word Quest">
+        <button id="petkoSplashButton" type="button">Play</button>
       </div>
     </div>
     <main class="app-shell">
       <header class="topbar">
         <div class="left-actions">
-          <button class="help-top-button" id="helpButton" type="button" aria-label="Правила">Правила</button>
-          <button class="icon-button share-top-button" id="shareButton" type="button" aria-label="Подели резултат">⤴</button>
+          <button class="help-top-button" id="helpButton" type="button" aria-label="Rules">Rules</button>
+          <button class="icon-button share-top-button" id="shareButton" type="button" aria-label="Share result">⤴</button>
         </div>
         <div class="brand">
-          <img class="brand-logo" src="petko-logo.png" alt="Петко">
+          <img class="brand-logo" src="petko-logo.png" alt="Petko Word Quest">
         </div>
         <div class="top-actions">
-          <button class="exit-button" id="exitButton" type="button" aria-label="Излаз">Излаз</button>
-          <div class="annual-top-score" id="annualTopScore" aria-label="Коначни годишњи скор">0</div>
+          <button class="exit-button" id="exitButton" type="button" aria-label="Exit">Exit</button>
+          <div class="annual-top-score" id="annualTopScore" aria-label="Final yearly score">0</div>
         </div>
       </header>
       <span id="tryButton" hidden></span>
@@ -45,13 +45,13 @@
             <small>© 2025 G-Lab - Dragan Milošević</small>
             <small>All rights reserved.</small>
           </div>
-          <a class="status-ad" href="https://dragangagy.github.io/numerology-app/" aria-label="Otvori Numerology App">
-            <img src="ad-numerology.png" alt="Numerology, Astrology and Tarot aplikacija">
+          <a class="status-ad" href="https://dragangagy.github.io/numerology-app/" aria-label="Open Numerology App">
+            <img src="ad-numerology.png" alt="Numerology, Astrology and Tarot app">
           </a>
         </div>
         <div class="status-copy">
-          <span class="eyebrow" id="modeLabel">Обичан</span>
-          <p id="message">Pogodi rec od 5 slova.</p>
+          <span class="eyebrow" id="modeLabel">Classic</span>
+          <p id="message">Guess the 5-letter word.</p>
         </div>
         <div class="score-stack">
           <div class="score-pill">
@@ -61,9 +61,9 @@
             <div class="score-count" id="scoreCount">
               <span class="score-total" id="scoreTotalLine">0/0</span>
               <span class="score-difference" id="scoreDifferenceLine">0</span>
-              <button class="status-profile-button" id="statusProfileButton" type="button" aria-label="Профил играча" hidden>
-                <span class="profile-avatar" id="statusProfileAvatar">И</span>
-                <span class="profile-name" id="statusProfileName">Играч</span>
+              <button class="status-profile-button" id="statusProfileButton" type="button" aria-label="Player profile" hidden>
+                <span class="profile-avatar" id="statusProfileAvatar">P</span>
+                <span class="profile-name" id="statusProfileName">Player</span>
               </button>
             </div>
           </div>
@@ -71,11 +71,11 @@
         </div>
       </section>
 
-      <section class="game-type-row" aria-label="Тип игре">
-        <button class="type-button active" type="button" data-type="normal">Обичан</button>
-        <button class="type-button" type="button" data-type="competitive">Такмичарски</button>
-        <button class="type-button" type="button" data-type="challenge">Изазов</button>
-        <button class="type-button" type="button" data-type="hall">Медаље</button>
+      <section class="game-type-row" aria-label="Game type">
+        <button class="type-button active" type="button" data-type="normal">Classic</button>
+        <button class="type-button" type="button" data-type="competitive">Competitive</button>
+        <button class="type-button" type="button" data-type="challenge">Challenge</button>
+        <button class="type-button" type="button" data-type="hall">Medals</button>
       </section>
 
       <section class="normal-stats" id="normalStats" aria-live="polite"></section>
@@ -83,57 +83,57 @@
       <section class="challenge-panel" id="challengePanel" hidden aria-live="polite">
         <div class="challenge-copy" id="challengeStatus" hidden></div>
         <div class="challenge-actions">
-          <div class="challenge-quota" id="challengeQuota">Изазови 0/1</div>
-          <div class="challenge-hint"><span>Изабери противника</span><span>pa pošalji izazov</span></div>
-          <button id="createChallengeButton" type="button">Izazov</button>
-          <div class="challenge-extra-note">Одиграј такмичарски део за још дозвољених изазова</div>
+          <div class="challenge-quota" id="challengeQuota">Challenges 0/1</div>
+          <div class="challenge-hint"><span>Pick an opponent</span><span>then send a challenge</span></div>
+          <button id="createChallengeButton" type="button">Challenge</button>
+          <div class="challenge-extra-note">Play Competitive to unlock more challenges</div>
         </div>
         <div class="challenge-player-picker" id="challengePlayerPicker" hidden>
-          <button class="challenge-player-select" id="challengePlayerButton" type="button" aria-expanded="false">Изазови Петка</button>
+          <button class="challenge-player-select" id="challengePlayerButton" type="button" aria-expanded="false">Challenge Petko</button>
           <div class="challenge-player-menu" id="challengePlayerMenu" hidden></div>
           <input id="challengePlayerSelect" type="hidden" value="">
         </div>
         <div class="challenge-code-tools challenge-card invite pending" hidden>
-          <div class="challenge-code-label">Позив за новог корисника</div>
-          <input id="challengeCodeInput" maxlength="32" placeholder="Име или надимак">
-          <button id="acceptChallengeButton" type="button">Прихвати</button>
-          <button id="checkChallengeButton" type="button" hidden>Провери</button>
+          <div class="challenge-code-label">Invite for a new player</div>
+          <input id="challengeCodeInput" maxlength="32" placeholder="Name or nickname">
+          <button id="acceptChallengeButton" type="button">Accept</button>
+          <button id="checkChallengeButton" type="button" hidden>Check</button>
         </div>
         <div class="challenge-history" id="challengeHistory"></div>
       </section>
 
       <section class="hall-panel" id="hallPanel" hidden aria-live="polite">
         <div class="hall-head">
-          <span>Дворана славних</span>
-          <button id="refreshHallButton" type="button">Освежи</button>
+          <span>Hall of Fame</span>
+          <button id="refreshHallButton" type="button">Refresh</button>
         </div>
         <div class="hall-carousel" id="hallCarousel"></div>
         <div class="hall-grid" id="hallGrid"></div>
       </section>
 
-      <button class="next-button" id="nextLevelButton" type="button" hidden>Даље</button>
+      <button class="next-button" id="nextLevelButton" type="button" hidden>Next</button>
 
-      <section class="mode-row" aria-label="Број речи">
+      <section class="mode-row" aria-label="Word count">
         <button class="mode-button active" type="button" data-mode="1">1</button>
         <button class="mode-button" type="button" data-mode="2">2</button>
         <button class="mode-button" type="button" data-mode="4">4</button>
         <button class="mode-button" type="button" data-mode="8">8</button>
       </section>
 
-      <section class="listing-panel" aria-label="Листа резултата">
+      <section class="listing-panel" aria-label="Results list">
         <div class="listing-head">
-          <span>Листа</span>
-          <small id="listingMeta">локално</small>
+          <span>List</span>
+          <small id="listingMeta">local</small>
         </div>
         <div class="player-row">
-          <input id="playerNameInput" maxlength="18" placeholder="Надимак" autocomplete="nickname">
-          <button id="saveNameButton" type="button">ОК</button>
+          <input id="playerNameInput" maxlength="18" placeholder="Nickname" autocomplete="nickname">
+          <button id="saveNameButton" type="button">OK</button>
         </div>
-        <div class="player-stats" id="playerStats">Статистика ће се приказати после online резултата.</div>
+        <div class="player-stats" id="playerStats">Stats will appear after online results.</div>
         <ol class="listing-list" id="listingList"></ol>
       </section>
 
-      <section class="solutions-panel" id="solutionsPanel" hidden aria-label="Решења"></section>
+      <section class="solutions-panel" id="solutionsPanel" hidden aria-label="Solutions"></section>
 
       <section class="idle-petko" aria-hidden="true">
         <img class="idle-petko-competitive" src="22.png" alt="">
@@ -143,32 +143,32 @@
         <div class="weekend-witch-winner" id="weekendWitchWinner" hidden></div>
       </section>
 
-      <section class="boards" id="boards" aria-label="Табла игре"></section>
+      <section class="boards" id="boards" aria-label="Game boards"></section>
 
       <section class="word-reveal" id="wordReveal" hidden aria-live="polite">
         <div class="word-reveal-word" id="wordRevealText"></div>
-        <button class="word-info-button" id="wordInfoButton" type="button" aria-label="Објашњење речи">?</button>
+        <button class="word-info-button" id="wordInfoButton" type="button" aria-label="Word meaning">?</button>
       </section>
 
-      <section class="keyboard" id="keyboard" aria-label="Тастатура"></section>
+      <section class="keyboard" id="keyboard" aria-label="Keyboard"></section>
 
       <div class="score-burst" id="scoreBurst" hidden></div>
     </main>
     <div class="petko-mood" id="petkoMood" hidden aria-live="polite">
       <img id="petkoMoodImage" src="petko-mood-hello.png" alt="">
-      <span id="petkoMoodText">Здраво!</span>
+      <span id="petkoMoodText">Hello!</span>
     </div>
 
     <div class="challenge-vs" id="challengeVsOverlay" hidden aria-live="polite">
       <div class="challenge-vs-card" role="dialog" aria-label="VS">
         <div class="challenge-vs-player challenge-vs-left">
-          <span class="profile-avatar challenge-vs-avatar" id="challengeVsLeftAvatar">И</span>
-          <strong id="challengeVsLeftName">Играч</strong>
+          <span class="profile-avatar challenge-vs-avatar" id="challengeVsLeftAvatar">P</span>
+          <strong id="challengeVsLeftName">Player</strong>
         </div>
         <img class="challenge-vs-bolt" src="vs.png" alt="VS">
         <div class="challenge-vs-player challenge-vs-right">
-          <span class="profile-avatar challenge-vs-avatar" id="challengeVsRightAvatar">И</span>
-          <strong id="challengeVsRightName">Противник</strong>
+          <span class="profile-avatar challenge-vs-avatar" id="challengeVsRightAvatar">P</span>
+          <strong id="challengeVsRightName">Opponent</strong>
         </div>
       </div>
     </div>
@@ -182,75 +182,75 @@
 
     <div class="help-modal" id="helpModal" hidden>
       <article class="help-card" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
-        <button class="help-close" id="helpCloseButton" type="button" aria-label="Затвори">×</button>
-        <h2 id="helpTitle">Помоћ</h2>
+        <button class="help-close" id="helpCloseButton" type="button" aria-label="Close">×</button>
+        <h2 id="helpTitle">Help</h2>
         <details class="help-section">
-          <summary>Правила игре</summary>
+          <summary>Game rules</summary>
           <ul>
-            <li>Циљ је погодити реч од 5 слова.</li>
-            <li>После сваког покушаја боје показују стање слова.</li>
-            <li>Зелено значи да је слово тачно и на правом месту.</li>
-            <li>Жуто значи да слово постоји у речи, али није на том месту.</li>
-            <li>Тамно значи да слово није у речи.</li>
-            <li>Обичан режим је вежба: једна реч, 6 покушаја, без бодова.</li>
-            <li>Такмичарски режим игра се једном дневно.</li>
-            <li>Нивои иду редом: 1, 2, 4, 8.</li>
-            <li>Следећи ниво се отвара само ако су сва поља решена.</li>
-            <li>Ако се ниво не реши, такмичење за тај дан се завршава.</li>
-            <li>Решена поља се затамњују или склапају и више не примају нова слова.</li>
-            <li>Ако изађеш из апликације, недовршена партија се памти.</li>
+            <li>Guess the 5-letter word.</li>
+            <li>After each try, colors show letter status.</li>
+            <li>Green means the letter is correct and in the right place.</li>
+            <li>Yellow means the letter is in the word, but in another place.</li>
+            <li>Dark means the letter is not in the word.</li>
+            <li>Classic mode is practice: one word, 6 tries, no points.</li>
+            <li>Competitive mode is played once per day.</li>
+            <li>Levels go in order: 1, 2, 4, 8.</li>
+            <li>The next level opens only if every board is solved.</li>
+            <li>If a level is not solved, the tournament ends for that day.</li>
+            <li>Solved boards dim or collapse and no longer accept letters.</li>
+            <li>If you leave the app, an unfinished run is saved.</li>
           </ul>
         </details>
         <details class="help-section">
-          <summary>Бодовање</summary>
+          <summary>Scoring</summary>
           <ul>
-            <li>Ниво 1 носи +4 поена.</li>
-            <li>Ниво 2 носи +8 поена.</li>
-            <li>Ниво 4 носи +16 поена.</li>
-            <li>Ниво 8 носи +32 поена.</li>
-            <li>Сваки неискоришћен покушај носи +5 бонус поена.</li>
-            <li>Ако ниво није решен, добија се -2.</li>
-            <li>Горњи број у скору је број започетих такмичарских партија / годишњи збир поена.</li>
-            <li>Велики број испод је најбољи дневни скор у години.</li>
+            <li>Level 1 awards +4 points.</li>
+            <li>Level 2 awards +8 points.</li>
+            <li>Level 4 awards +16 points.</li>
+            <li>Level 8 awards +32 points.</li>
+            <li>Each unused try awards +5 bonus points.</li>
+            <li>If a level is not solved, you get -2.</li>
+            <li>The top score number is started competitive runs / yearly total points.</li>
+            <li>The large number below is the best daily score in the year.</li>
           </ul>
         </details>
         <details class="help-section bonus-help">
-          <summary>Бонус игра</summary>
+          <summary>Bonus play</summary>
           <ul>
-            <li>Петком се укључује специјал “Петак за Петка”.</li>
-            <li>Такмичарски поени се петком дуплирају као бонус на главни годишњи скор.</li>
-            <li>Дневни скор се петком не дуплира; он остаје чист резултат тог дана.</li>
-            <li>Обичан режим петком учествује у бонусу: реши 5 обичних партија заредом за +5 на главни скор.</li>
-            <li>Ако обичну партију не решиш, петак бројач се враћа на 0/5.</li>
-            <li>Суботом и недељом се укључује “Викенд вештичарења”.</li>
-            <li>На уласку се нуде викенд аватари Z41-Z45. Изабрани аватар важи до краја недеље, па се после викенда враћа претходни аватар.</li>
-            <li>Док је викенд аватар активан, добијаш +1 дозвољен изазов на свака 3 сата. Обичан низ и такмичарски и даље отварају додатне изазове.</li>
+            <li>Friday unlocks the special “Petko Friday”.</li>
+            <li>Competitive points are doubled on Friday as a bonus to the yearly score.</li>
+            <li>Daily score on Friday is not doubled; it stays the clean result for that day.</li>
+            <li>Classic mode on Friday counts toward a bonus: solve 5 classics in a row for +5 on the main score.</li>
+            <li>If you fail a classic game, the Friday streak resets to 0/5.</li>
+            <li>Saturday and Sunday unlock “Witch Hunt Weekend”.</li>
+            <li>On entry you can pick weekend avatars Z41-Z45. The chosen avatar lasts until the end of Sunday, then your previous avatar returns.</li>
+            <li>While a weekend avatar is active, you get +1 allowed challenge every 3 hours. Classic streaks and Competitive still unlock extra challenges.</li>
           </ul>
         </details>
         <details class="help-section">
-          <summary>Изазов</summary>
+          <summary>Challenge</summary>
           <ul>
-            <li>Изазов има 6 табли и укупно 11 покушаја.</li>
-            <li>На почетку дана имаш 1 дозвољен изазов.</li>
-            <li>Такмичарски део отвара додатне изазове: ниво 1 даје +1, ниво 2 даје +2, ниво 4 даје +4, а ниво 8 даје +8.</li>
-            <li>Број изазова се приказује као искоришћено / дозвољено. Ако пређеш све нивое, имаш 16 изазова за тај дан.</li>
-            <li>Кад изазовеш противника, позив чека прихватање и приказује се као жута картица.</li>
-            <li>Ако противник не прихвати позив у року од 6 сати, позив истиче и враћа ти се то место за нови изазов.</li>
-            <li>Кад је изазов прихваћен, картица постаје зелена и може да се настави у року од 24 сата.</li>
-            <li>Примање изазова је неограничено.</li>
-            <li>Одиграни резултати изазова виде се као плаве картице и чисте се после поноћи.</li>
-            <li>Изазов се игра тек кад противник прихвати код или линк.</li>
+            <li>A challenge has 6 boards and 11 total tries.</li>
+            <li>You start each day with 1 allowed challenge.</li>
+            <li>Competitive unlocks more challenges: level 1 gives +1, level 2 gives +2, level 4 gives +4, and level 8 gives +8.</li>
+            <li>Challenge count is shown as used / allowed. Clearing every level gives 16 challenges for that day.</li>
+            <li>When you challenge someone, the invite waits for accept and shows as a yellow card.</li>
+            <li>If the opponent does not accept within 6 hours, the invite expires and the slot returns.</li>
+            <li>When accepted, the card turns green and can be played within 24 hours.</li>
+            <li>Receiving challenges is unlimited.</li>
+            <li>Played challenge results show as blue cards and clear after midnight.</li>
+            <li>A challenge is played only after the opponent accepts the code or link.</li>
           </ul>
         </details>
         <details class="help-section">
-          <summary>Профил</summary>
+          <summary>Profile</summary>
           <ul>
-            <li>Профил се отвара кликом на мали прозор са аватаром у горњем делу игре.</li>
-            <li>У профилу можеш да промениш име играча и аватар.</li>
-            <li>Клик на слику аватара отвара избор аватара.</li>
-            <li>Код за повезивање служи да исти профил користиш на више уређаја.</li>
-            <li>Када повежеш профил, резултати, изазови и медаље се везују за истог играча.</li>
-            <li>Име може да се промени ограничен број пута, да би листе и изазови остали прегледни.</li>
+            <li>Open your profile by tapping the small avatar window near the top of the game.</li>
+            <li>In the profile you can change your player name and avatar.</li>
+            <li>Tap the avatar image to open avatar selection.</li>
+            <li>The link code lets you use the same profile on multiple devices.</li>
+            <li>When you link a profile, results, challenges, and medals stay tied to the same player.</li>
+            <li>Name changes are limited so leaderboards and challenges stay readable.</li>
           </ul>
         </details>
       </article>
@@ -258,7 +258,7 @@
 
     <div class="word-modal" id="wordModal" hidden>
       <article class="word-card" role="dialog" aria-modal="true" aria-labelledby="wordModalTitle">
-        <h2 id="wordModalTitle">Реч</h2>
+        <h2 id="wordModalTitle">Word</h2>
         <div class="word-modal-word" id="wordModalWord"></div>
         <p id="wordModalText"></p>
         <p class="word-review-text" id="wordReviewText"></p>
@@ -268,35 +268,35 @@
 
     <div class="profile-modal" id="profileModal" hidden>
       <article class="profile-card" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
-        <button class="profile-close" id="profileCloseButton" type="button" aria-label="Затвори">×</button>
-        <h2 id="profileTitle">Профил</h2>
-        <button class="profile-avatar-large" id="profileAvatarButton" type="button" aria-label="Изабери аватар">
-          <span class="profile-avatar" id="profileModalAvatar">И</span>
+        <button class="profile-close" id="profileCloseButton" type="button" aria-label="Close">×</button>
+        <h2 id="profileTitle">Profile</h2>
+        <button class="profile-avatar-large" id="profileAvatarButton" type="button" aria-label="Choose avatar">
+          <span class="profile-avatar" id="profileModalAvatar">P</span>
         </button>
-        <p class="profile-avatar-hint">Кликни на слику да промениш аватар</p>
+        <p class="profile-avatar-hint">Tap the image to change avatar</p>
         <div class="profile-name-row">
-          <div class="profile-player-name" id="profileModalName">Играч</div>
-          <button class="profile-edit-button" id="profileEditButton" type="button">Измени</button>
+          <div class="profile-player-name" id="profileModalName">Player</div>
+          <button class="profile-edit-button" id="profileEditButton" type="button">Edit</button>
         </div>
-        <button class="profile-link-toggle" id="profileLinkToggleButton" type="button" aria-expanded="false">Повезивање профила</button>
+        <button class="profile-link-toggle" id="profileLinkToggleButton" type="button" aria-expanded="false">Link profile</button>
         <div class="profile-link-code" id="profileLinkCodePanel" hidden>
-          <span>Код за повезивање</span>
-          <strong id="profileLinkCode">PK-PETKO</strong>
-          <button id="profileCopyCodeButton" type="button">Копирај</button>
-          <input id="profileConnectInput" type="text" autocomplete="off" spellcheck="false" placeholder="Унеси код">
-          <button id="profileConnectButton" type="button">Повежи</button>
+          <span>Link code</span>
+          <strong id="profileLinkCode">PK-PWQ</strong>
+          <button id="profileCopyCodeButton" type="button">Copy</button>
+          <input id="profileConnectInput" type="text" autocomplete="off" spellcheck="false" placeholder="Enter code">
+          <button id="profileConnectButton" type="button">Link</button>
         </div>
         <div class="profile-edit-row" id="profileEditRow" hidden>
-          <input id="profileNameInput" type="text" maxlength="18" autocomplete="off" aria-label="Име играча">
-          <button id="profileSaveNameButton" type="button">Сачувај</button>
-          <button id="profileCancelNameButton" type="button">Откажи</button>
+          <input id="profileNameInput" type="text" maxlength="18" autocomplete="off" aria-label="Player name">
+          <button id="profileSaveNameButton" type="button">Save</button>
+          <button id="profileCancelNameButton" type="button">Cancel</button>
         </div>
         <div class="profile-avatar-menu" id="profileAvatarMenu" hidden>
-          <div class="profile-avatar-tabs" role="tablist" aria-label="Тип аватара">
-            <button class="active" id="profileMaleTab" type="button" data-avatar-tab="male">Мушко</button>
-            <button id="profileFemaleTab" type="button" data-avatar-tab="female">Женско</button>
+          <div class="profile-avatar-tabs" role="tablist" aria-label="Avatar type">
+            <button class="active" id="profileMaleTab" type="button" data-avatar-tab="male">Male</button>
+            <button id="profileFemaleTab" type="button" data-avatar-tab="female">Female</button>
           </div>
-          <p class="profile-avatar-unlock-note" id="profileAvatarUnlockNote">Ваша достигнућа ће откључати нове аватаре.</p>
+          <p class="profile-avatar-unlock-note" id="profileAvatarUnlockNote">Your achievements unlock new avatars.</p>
           <div class="profile-avatar-grid" id="profileAvatarGrid"></div>
         </div>
         <p class="profile-message" id="profileMessage"></p>
@@ -305,27 +305,27 @@
 
     <div class="challenge-picker-modal" id="challengePickerModal" hidden>
       <article class="challenge-picker-card" role="dialog" aria-modal="true" aria-labelledby="challengePickerTitle">
-        <button class="challenge-picker-close" id="challengePickerClose" type="button" aria-label="Затвори">×</button>
-        <h2 id="challengePickerTitle">Изабери противника</h2>
-        <input class="challenge-picker-search" id="challengePickerSearch" type="search" autocomplete="off" placeholder="Претрага">
-        <div class="challenge-picker-stats" id="challengePickerStats">Изабери играча за међусобни скор.</div>
+        <button class="challenge-picker-close" id="challengePickerClose" type="button" aria-label="Close">×</button>
+        <h2 id="challengePickerTitle">Choose opponent</h2>
+        <input class="challenge-picker-search" id="challengePickerSearch" type="search" autocomplete="off" placeholder="Search">
+        <div class="challenge-picker-stats" id="challengePickerStats">Pick a player for head-to-head score.</div>
         <div class="challenge-picker-grid" id="challengePickerGrid"></div>
         <div class="challenge-picker-message" id="challengePickerMessage" aria-live="polite"></div>
-        <button class="challenge-picker-submit" id="challengePickerSubmit" type="button" disabled>Изазов</button>
+        <button class="challenge-picker-submit" id="challengePickerSubmit" type="button" disabled>Challenge</button>
       </article>
     </div>
 
     <div class="hall-modal" id="hallModal" hidden>
       <article class="hall-modal-card" role="dialog" aria-modal="true" aria-labelledby="hallModalTitle">
-        <button class="hall-modal-close" id="hallModalClose" type="button" aria-label="Затвори">×</button>
+        <button class="hall-modal-close" id="hallModalClose" type="button" aria-label="Close">×</button>
         <img class="hall-modal-bg" id="hallModalImage" alt="">
-        <h2 id="hallModalTitle">Медаља</h2>
+        <h2 id="hallModalTitle">Medal</h2>
         <div class="hall-modal-holder" id="hallModalHolder">TOP 10</div>
         <ol class="hall-top-list" id="hallTopList"></ol>
         <div class="hall-formula" id="hallFormula"></div>
       </article>
     </div>
 
-  <script src="app.js?v=308"></script>
+  <script src="app.js?v=1"></script>
   </body>
 </html>
