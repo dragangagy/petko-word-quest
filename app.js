@@ -17899,7 +17899,7 @@ function renderWeekendWitchScoreboard(rows = []) {
     weekendWitchScoreboardEl.innerHTML = "";
     if (weekendWitchWinnerEl) weekendWitchWinnerEl.hidden = true;
     if (idleWitchWeekendPosterEl) {
-      idleWitchWeekendPosterEl.src = "witch-weekend-poster.png";
+      idleWitchWeekendPosterEl.src = "witch-weekend-poster.png?v=6";
       idleWitchWeekendPosterEl.alt = "";
     }
     return;
@@ -17932,7 +17932,7 @@ function renderWeekendWitchScoreboard(rows = []) {
   if (idleWitchWeekendPosterEl) {
     idleWitchWeekendPosterEl.src = showFinalWinner
       ? witchHuntWinnerImage(winningFaction, displayWindow)
-      : "witch-weekend-poster.png";
+      : "witch-weekend-poster.png?v=6";
     idleWitchWeekendPosterEl.alt = showFinalWinner ? "Witch Hunt winners" : "";
   }
   if (weekendWitchWinnerEl) {
