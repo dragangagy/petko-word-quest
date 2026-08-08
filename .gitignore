@@ -2,3 +2,27 @@
 Thumbs.db
 *.log
 node_modules/
+www/
+
+# Capacitor / native build outputs
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+android/.idea/
+android/*.iml
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+*.xcuserdata
+*.xcworkspace/xcuserdata/
+
+# Signing secrets — never commit
+*.jks
+*.keystore
+android/keystore.properties
+*.p12
+*.mobileprovision
+.env
+.env.*

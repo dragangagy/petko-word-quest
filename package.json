@@ -1,0 +1,26 @@
+{
+  "name": "petko-word-quest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Petko Word Quest — Capacitor packaging for Google Play and App Store",
+  "scripts": {
+    "build": "node scripts/build-www.js",
+    "assets": "npx capacitor-assets generate --iconBackgroundColor \"#0f172a\" --splashBackgroundColor \"#0f172a\"",
+    "cap:sync": "npm run build && npx cap sync",
+    "cap:sync:android": "npm run build && npx cap sync android",
+    "cap:sync:ios": "npm run build && npx cap sync ios",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios",
+    "android:debug": "npm run cap:sync:android && cd android && .\\gradlew.bat assembleDebug",
+    "android:bundle": "npm run cap:sync:android && cd android && .\\gradlew.bat bundleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.4.3"
+  }
+}

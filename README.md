@@ -46,6 +46,20 @@ Open `index.html` in a browser, or serve the folder with any static server.
 npx --yes serve .
 ```
 
+## App stores (Capacitor)
+
+Native shells for Google Play and the Apple App Store use Capacitor with local web assets in `www/`.
+
+```powershell
+npm install
+npm run build          # copy static files → www/
+npm run cap:sync       # sync into android/ and ios/
+```
+
+- **appId:** `com.glab.petkowordquest`
+- **Play AAB / iOS archive steps, icons, signing:** see [STORE.md](STORE.md)
+- iOS Archive requires macOS + Xcode; this Windows machine can generate the project and sync Android.
+
 ## Notes
 
 - Word length is 5 letters (A–Z).
