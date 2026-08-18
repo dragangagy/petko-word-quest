@@ -14927,6 +14927,37 @@ const USED_WORDS_KEY = "pwq-used-words-v2";
 const WORD_DECK_KEY = "pwq-word-deck-v1";
 const ONLINE_WORDS_KEY = "pwq-online-words-v1";
 const NOTIFICATION_SEEN_KEY = "pwq-notification-seen-v1";
+const TRADE_WALLET_KEY = "pwq-trade-wallet-v1";
+const TRADE_CHALLENGE_CREDIT_KEY = "pwq-trade-challenge-credit-v1";
+const TRADE_LEDGER_LIMIT = 12;
+const TRADE_WELCOME_BASE = 10;
+const TRADE_WELCOME_MAX_EXTRA = 40;
+const TRADE_COIN_CLASSIC_WIN = 1;
+const TRADE_COIN_CHALLENGE_WIN = 5;
+const TRADE_RATE_STEPS = [0.7, 0.85, 1, 1.15, 1.3];
+const TRADE_ITEMS = [
+  {
+    id: "hint",
+    name: "Letter Hint",
+    basePrice: 6,
+    cap: 9,
+    info: "Reveals one letter of the word during a Classic game."
+  },
+  {
+    id: "shield",
+    name: "Streak Shield",
+    basePrice: 8,
+    cap: 3,
+    info: "Spent instead of your Classic streaks when a game fails."
+  },
+  {
+    id: "challenge",
+    name: "Extra Challenge",
+    basePrice: 10,
+    cap: 0,
+    info: "Adds +1 allowed challenge for today."
+  }
+];
 const BASE_PROFILE_AVATARS = [
   ...Array.from({ length: 19 }, (_, index) => ({
     id: `male-${index + 1}`,
@@ -15176,6 +15207,16 @@ const hallModalHolder = document.querySelector("#hallModalHolder");
 const hallTopList = document.querySelector("#hallTopList");
 const hallFormula = document.querySelector("#hallFormula");
 const hallModalClose = document.querySelector("#hallModalClose");
+const tradePanelEl = document.querySelector("#tradePanel");
+const tradeBalanceEl = document.querySelector("#tradeBalance");
+const tradeCountdownEl = document.querySelector("#tradeCountdown");
+const tradeMarketEl = document.querySelector("#tradeMarket");
+const tradeInventoryEl = document.querySelector("#tradeInventory");
+const tradeMessageEl = document.querySelector("#tradeMessage");
+const tradeLedgerEl = document.querySelector("#tradeLedger");
+const hintStripEl = document.querySelector("#hintStrip");
+const hintButton = document.querySelector("#hintButton");
+const hintCellsEl = document.querySelector("#hintCells");
 const shareButton = document.querySelector("#shareButton");
 const exitButton = document.querySelector("#exitButton");
 const nextLevelButton = document.querySelector("#nextLevelButton");
@@ -15224,6 +15265,9 @@ let hallMedalIndex = 0;
 let hallTouchStartX = 0;
 let challengeSyncBusy = false;
 let challengeSyncSnapshot = "";
+let normalHintReveals = [];
+let tradeConfirmItemId = "";
+let tradeConfirmTimer = null;
 
 function normalize(text) {
   return String(text || "")
@@ -16658,9 +16702,10 @@ function challengeDailyLimit() {
   const normalBonus = loadNormalChallengeBonus().bonus;
   const weekendBonus = weekendWitchChallengeBonus();
   const manualCredit = loadManualChallengeCredit();
+  const tradeCredit = tradeChallengeCreditToday();
   return Math.min(
     CHALLENGE_MAX_DAILY_LIMIT,
-    CHALLENGE_BASE_DAILY_LIMIT + levelBonus + normalBonus + weekendBonus + manualCredit
+    CHALLENGE_BASE_DAILY_LIMIT + levelBonus + normalBonus + weekendBonus + manualCredit + tradeCredit
   );
 }
 
@@ -19799,7 +19844,7 @@ function loadNormalProgress() {
 
 function saveNormalProgress() {
   if (gameType !== "normal" || done) return;
-  if (!normalStartedCounted && !current && !guesses.length) return;
+  if (!normalStartedCounted && !current && !guesses.length && !normalHintReveals.length) return;
   const progress = {
     status: "in_progress",
     mode,
@@ -19810,6 +19855,7 @@ function saveNormalProgress() {
     guesses,
     current,
     keyStates: [...keyStates.entries()],
+    hintReveals: normalHintReveals,
     updatedAt: new Date().toISOString()
   };
   localStorage.setItem(NORMAL_PROGRESS_KEY, JSON.stringify(progress));
@@ -19905,6 +19951,7 @@ function restoreNormalProgress(progress) {
   guesses = Array.isArray(progress.guesses) ? progress.guesses : [];
   current = progress.current || "";
   keyStates = new Map(Array.isArray(progress.keyStates) ? progress.keyStates : []);
+  normalHintReveals = Array.isArray(progress.hintReveals) ? progress.hintReveals : [];
   lastLevelAward = null;
   bonusFlashRows = new Set();
 
@@ -20042,6 +20089,10 @@ function startGame(nextType = gameType, requestedMode, options = {}) {
     showHallOfFame();
     return;
   }
+  if (nextType === "trade") {
+    showTradePost();
+    return;
+  }
   if (!hasRegisteredPlayerProfile()) {
     openProfileModal();
     setProfileEditMode(true);
@@ -20115,6 +20166,7 @@ function startGame(nextType = gameType, requestedMode, options = {}) {
   current = "";
   done = false;
   keyStates = new Map();
+  normalHintReveals = [];
   bonusFlashRows = new Set();
   renderSolutionsPanel(false);
 
@@ -20166,6 +20218,7 @@ function render() {
     : `${guesses.length}/${maxAttempts()}`;
   updateScoreDisplay();
   renderNormalStats();
+  renderHintStrip();
   updateCompetitiveCountdown();
   requestAnimationFrame(positionKeyboard);
 }
@@ -20412,6 +20465,7 @@ function submitGuess() {
       competitiveCompleted = Math.max(competitiveCompleted, competitiveLevelIndex + 1);
       updateChallengeQuota();
       applyLevelAward();
+      grantTradeCoins(tradeCoinsForLevel(), `Level ${competitiveLevelIndex + 1} cleared`);
       renderSolutionsPanel(true);
       const isFinalLevel = competitiveLevelIndex === COMPETITIVE_LEVELS.length - 1;
       updateCompetitiveNextButton();
@@ -20426,12 +20480,15 @@ function submitGuess() {
       updateModeButtons();
     } else if (gameType === "challenge") {
       playPetkoMoment("challengeWin", { force: true });
+      grantTradeCoins(TRADE_COIN_CHALLENGE_WIN, "Challenge cleared");
       finishChallenge("finished");
     } else {
       bumpNormalFinished();
+      grantTradeCoins(TRADE_COIN_CLASSIC_WIN, "Classic win");
       const challengeText = recordNormalChallengeWin();
       const fridayText = recordFridayNormalWin();
-      const normalWinText = [fridayText, challengeText].filter(Boolean).join(" ");
+      const coinText = `+${TRADE_COIN_CLASSIC_WIN} G-Coin.`;
+      const normalWinText = [fridayText, challengeText, coinText].filter(Boolean).join(" ");
       messageEl.textContent = normalWinText || "Got it!";
       playPetkoMoment(fridayText ? "fridayWin" : "normalWin", { text: normalWinText || "", force: true });
       clearNormalProgress();
@@ -20452,10 +20509,14 @@ function submitGuess() {
       playPetkoMoment("challengeFail", { force: true });
       finishChallenge("failed");
     } else {
-      messageEl.textContent = `The word was: ${displayWords(targets)}`;
       playPetkoMoment("normalMiss", { force: true });
-      resetFridayNormalStreak();
-      resetNormalChallengeStreak();
+      if (consumeStreakShield()) {
+        messageEl.textContent = `The word was: ${displayWords(targets)}. Streak Shield used, your streaks are safe.`;
+      } else {
+        messageEl.textContent = `The word was: ${displayWords(targets)}`;
+        resetFridayNormalStreak();
+        resetNormalChallengeStreak();
+      }
       clearNormalProgress();
       nextLevelButton.textContent = "Next";
       nextLevelButton.hidden = false;
@@ -21312,6 +21373,372 @@ function showHallOfFame() {
   renderHallOfFame();
 }
 
+function emptyTradeWallet() {
+  return { coins: 0, hints: 0, shields: 0, earned: 0, welcome: false, ledger: [] };
+}
+
+function loadTradeWallet() {
+  try {
+    const wallet = { ...emptyTradeWallet(), ...JSON.parse(localStorage.getItem(TRADE_WALLET_KEY) || "{}") };
+    wallet.coins = Math.max(0, Math.round(Number(wallet.coins) || 0));
+    wallet.hints = Math.max(0, Math.round(Number(wallet.hints) || 0));
+    wallet.shields = Math.max(0, Math.round(Number(wallet.shields) || 0));
+    wallet.earned = Math.max(0, Math.round(Number(wallet.earned) || 0));
+    wallet.welcome = Boolean(wallet.welcome);
+    wallet.ledger = Array.isArray(wallet.ledger) ? wallet.ledger.slice(0, TRADE_LEDGER_LIMIT) : [];
+    return wallet;
+  } catch {
+    return emptyTradeWallet();
+  }
+}
+
+function saveTradeWallet(wallet) {
+  localStorage.setItem(
+    TRADE_WALLET_KEY,
+    JSON.stringify({ ...wallet, ledger: (wallet.ledger || []).slice(0, TRADE_LEDGER_LIMIT) })
+  );
+}
+
+function pushTradeLedger(wallet, label, amount) {
+  wallet.ledger = [{ at: Date.now(), label, amount }, ...(wallet.ledger || [])].slice(0, TRADE_LEDGER_LIMIT);
+}
+
+function grantTradeCoins(amount, label) {
+  const value = Math.max(0, Math.round(Number(amount) || 0));
+  if (!value) return 0;
+  const wallet = loadTradeWallet();
+  wallet.coins += value;
+  wallet.earned += value;
+  pushTradeLedger(wallet, label, value);
+  saveTradeWallet(wallet);
+  updateTradeBadge();
+  if (gameType === "trade") renderTradePanel();
+  return value;
+}
+
+function tradeCoinsForLevel(levelIndex = competitiveLevelIndex) {
+  return Math.max(1, Math.round((COMPETITIVE_LEVEL_POINTS[levelIndex] || 4) / 4));
+}
+
+function tradeRateForItem(itemId, dayId = todayId()) {
+  const seedText = `${dayId}:${itemId}`;
+  let hash = 0;
+  for (let index = 0; index < seedText.length; index += 1) {
+    hash = (hash * 31 + seedText.charCodeAt(index)) >>> 0;
+  }
+  return TRADE_RATE_STEPS[hash % TRADE_RATE_STEPS.length];
+}
+
+function tradePriceForItem(item) {
+  return Math.max(1, Math.round(item.basePrice * tradeRateForItem(item.id)));
+}
+
+function tradeChallengeCreditToday() {
+  try {
+    const data = JSON.parse(localStorage.getItem(TRADE_CHALLENGE_CREDIT_KEY) || "null");
+    if (!data || data.date !== todayId()) return 0;
+    return Math.max(0, Number(data.credit) || 0);
+  } catch {
+    return 0;
+  }
+}
+
+function addTradeChallengeCredit() {
+  localStorage.setItem(
+    TRADE_CHALLENGE_CREDIT_KEY,
+    JSON.stringify({ date: todayId(), credit: tradeChallengeCreditToday() + 1 })
+  );
+}
+
+function tradeItemOwnedCount(wallet, itemId) {
+  if (itemId === "hint") return wallet.hints;
+  if (itemId === "shield") return wallet.shields;
+  if (itemId === "challenge") return tradeChallengeCreditToday();
+  return 0;
+}
+
+function setTradeMessage(text) {
+  if (tradeMessageEl) tradeMessageEl.textContent = text;
+}
+
+function buyTradeItem(itemId) {
+  const item = TRADE_ITEMS.find((entry) => entry.id === itemId);
+  if (!item) return;
+  const wallet = loadTradeWallet();
+  const price = tradePriceForItem(item);
+  if (item.cap && tradeItemOwnedCount(wallet, item.id) >= item.cap) {
+    setTradeMessage(`You already hold the maximum of ${item.cap}.`);
+    renderTradePanel();
+    return;
+  }
+  if (wallet.coins < price) {
+    setTradeMessage(`Not enough G-Coins: this costs ${price}.`);
+    renderTradePanel();
+    return;
+  }
+  wallet.coins -= price;
+  if (item.id === "hint") wallet.hints += 1;
+  if (item.id === "shield") wallet.shields += 1;
+  pushTradeLedger(wallet, `Bought ${item.name}`, -price);
+  saveTradeWallet(wallet);
+  if (item.id === "challenge") {
+    addTradeChallengeCredit();
+    updateChallengeQuota();
+  }
+  updateTradeBadge();
+  setTradeMessage(`${item.name} purchased for ${price} G-Coins.`);
+  renderTradePanel();
+}
+
+function handleTradeBuyClick(itemId) {
+  if (tradeConfirmTimer) window.clearTimeout(tradeConfirmTimer);
+  if (tradeConfirmItemId === itemId) {
+    tradeConfirmItemId = "";
+    tradeConfirmTimer = null;
+    buyTradeItem(itemId);
+    return;
+  }
+  tradeConfirmItemId = itemId;
+  tradeConfirmTimer = window.setTimeout(() => {
+    tradeConfirmItemId = "";
+    tradeConfirmTimer = null;
+    renderTradeMarket();
+  }, 4000);
+  renderTradeMarket();
+}
+
+function ensureTradeWelcomeBonus() {
+  const wallet = loadTradeWallet();
+  if (wallet.welcome) return;
+  const total = Math.max(0, Number(annualScoreSummary().total) || 0);
+  const bonus = TRADE_WELCOME_BASE + Math.min(TRADE_WELCOME_MAX_EXTRA, Math.floor(total / 25));
+  wallet.welcome = true;
+  wallet.coins += bonus;
+  wallet.earned += bonus;
+  pushTradeLedger(wallet, "Welcome to G-Lab Trade", bonus);
+  saveTradeWallet(wallet);
+  updateTradeBadge();
+}
+
+function updateTradeBadge() {
+  const button = typeButtons.find((item) => item.dataset.type === "trade");
+  if (!button) return;
+  const wallet = loadTradeWallet();
+  if (wallet.coins > 0) button.dataset.coins = formatScore(wallet.coins);
+  else delete button.dataset.coins;
+}
+
+function tradeCountdownText() {
+  const ms = msUntilTomorrow();
+  const hours = Math.floor(ms / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  return `New prices in ${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+function renderTradeMarket(wallet = loadTradeWallet()) {
+  if (!tradeMarketEl) return;
+  tradeMarketEl.innerHTML = "";
+  TRADE_ITEMS.forEach((item) => {
+    const price = tradePriceForItem(item);
+    const rate = tradeRateForItem(item.id);
+    const owned = tradeItemOwnedCount(wallet, item.id);
+    const atCap = Boolean(item.cap) && owned >= item.cap;
+    const card = document.createElement("article");
+    card.className = "trade-card";
+    const head = document.createElement("div");
+    head.className = "trade-card-head";
+    const name = document.createElement("strong");
+    name.textContent = item.name;
+    head.append(name);
+    if (rate < 1) {
+      const tag = document.createElement("span");
+      tag.className = "trade-tag deal";
+      tag.textContent = `-${Math.round((1 - rate) * 100)}%`;
+      head.append(tag);
+    } else if (rate > 1) {
+      const tag = document.createElement("span");
+      tag.className = "trade-tag high";
+      tag.textContent = `+${Math.round((rate - 1) * 100)}%`;
+      head.append(tag);
+    }
+    const info = document.createElement("p");
+    info.textContent = item.info;
+    const foot = document.createElement("div");
+    foot.className = "trade-card-foot";
+    const ownedEl = document.createElement("span");
+    ownedEl.className = "trade-owned";
+    ownedEl.textContent = item.id === "challenge"
+      ? `Today +${owned}`
+      : `Owned ${owned}${item.cap ? `/${item.cap}` : ""}`;
+    const buy = document.createElement("button");
+    buy.type = "button";
+    buy.className = "trade-buy";
+    const confirming = tradeConfirmItemId === item.id;
+    buy.textContent = atCap ? "Max held" : confirming ? `Confirm ${price} G?` : `${price} G-Coins`;
+    buy.classList.toggle("confirming", confirming);
+    buy.disabled = atCap || (!confirming && wallet.coins < price);
+    buy.addEventListener("click", () => handleTradeBuyClick(item.id));
+    foot.append(ownedEl, buy);
+    card.append(head, info, foot);
+    tradeMarketEl.append(card);
+  });
+}
+
+function renderTradeInventory(wallet = loadTradeWallet()) {
+  if (!tradeInventoryEl) return;
+  tradeInventoryEl.textContent =
+    `Hints ${wallet.hints} · Shields ${wallet.shields} · Extra challenges today +${tradeChallengeCreditToday()} · Earned all time ${formatScore(wallet.earned)} G`;
+}
+
+function renderTradeLedger(wallet = loadTradeWallet()) {
+  if (!tradeLedgerEl) return;
+  tradeLedgerEl.innerHTML = "";
+  if (!wallet.ledger.length) {
+    const empty = document.createElement("li");
+    empty.className = "trade-ledger-empty";
+    empty.textContent = "No trades yet. Win games to earn G-Coins.";
+    tradeLedgerEl.append(empty);
+    return;
+  }
+  wallet.ledger.forEach((entry) => {
+    const row = document.createElement("li");
+    const label = document.createElement("span");
+    label.textContent = String(entry.label || "Trade");
+    const amount = document.createElement("strong");
+    const value = Number(entry.amount) || 0;
+    if (value === 0) {
+      amount.textContent = "used";
+      amount.className = "spend";
+    } else {
+      amount.textContent = `${value > 0 ? "+" : ""}${formatScore(value)} G`;
+      amount.className = value > 0 ? "gain" : "spend";
+    }
+    row.append(label, amount);
+    tradeLedgerEl.append(row);
+  });
+}
+
+function renderTradePanel() {
+  if (!tradePanelEl) return;
+  tradePanelEl.hidden = gameType !== "trade";
+  if (tradePanelEl.hidden) return;
+  const wallet = loadTradeWallet();
+  if (tradeBalanceEl) tradeBalanceEl.textContent = formatScore(wallet.coins);
+  if (tradeCountdownEl) tradeCountdownEl.textContent = tradeCountdownText();
+  renderTradeMarket(wallet);
+  renderTradeInventory(wallet);
+  renderTradeLedger(wallet);
+}
+
+function showTradePost() {
+  gameType = "trade";
+  done = true;
+  activeChallenge = null;
+  competitiveIntro = false;
+  competitiveRunActive = false;
+  document.body.dataset.gameType = gameType;
+  document.body.dataset.competitiveLocked = "false";
+  document.body.dataset.competitiveIntro = "false";
+  document.body.dataset.challengePlaying = "false";
+  document.body.dataset.challengeFinished = "false";
+  boardsEl.innerHTML = "";
+  keyboardEl.innerHTML = "";
+  renderSolutionsPanel(false);
+  hideWordReveal();
+  nextLevelButton.hidden = true;
+  modeLabelEl.textContent = "Trade";
+  messageEl.textContent = "";
+  tryCountEl.textContent = "0";
+  typeButtons.forEach((button) => button.classList.toggle("active", button.dataset.type === gameType));
+  updateModeButtons();
+  updateScoreDisplay();
+  ensureTradeWelcomeBonus();
+  setTradeMessage("");
+  renderTradePanel();
+}
+
+function consumeStreakShield() {
+  const challengeStreak = loadNormalChallengeBonus().streak;
+  const fridayStreak = isPetkoFriday() ? Number(loadFridayBonus().normalStreak) || 0 : 0;
+  if (challengeStreak < 1 && fridayStreak < 1) return false;
+  const wallet = loadTradeWallet();
+  if (wallet.shields < 1) return false;
+  wallet.shields -= 1;
+  pushTradeLedger(wallet, "Streak Shield used", 0);
+  saveTradeWallet(wallet);
+  return true;
+}
+
+function normalHintRevealedPositions() {
+  const positions = new Set(normalHintReveals.map((entry) => entry.index));
+  const target = targets[0] || "";
+  guesses.forEach((guess) => {
+    [...guess].forEach((letter, index) => {
+      if (target[index] === letter) positions.add(index);
+    });
+  });
+  return positions;
+}
+
+function useLetterHint() {
+  if (gameType !== "normal" || done || targets.length !== 1) return;
+  const wallet = loadTradeWallet();
+  if (wallet.hints < 1) {
+    messageEl.textContent = "No Letter Hints. Get one in G-Lab Trade.";
+    return;
+  }
+  const target = targets[0];
+  const taken = normalHintRevealedPositions();
+  const open = [...target].map((_, index) => index).filter((index) => !taken.has(index));
+  if (!open.length) {
+    messageEl.textContent = "Every letter is already revealed.";
+    return;
+  }
+  const index = open[Math.floor(Math.random() * open.length)];
+  const letter = target[index];
+  normalHintReveals.push({ index, letter });
+  wallet.hints -= 1;
+  saveTradeWallet(wallet);
+  if (keyStates.get(letter) !== "correct") keyStates.set(letter, "correct");
+  saveNormalProgress();
+  updateTradeBadge();
+  renderKeyboard();
+  renderHintStrip();
+  messageEl.textContent = `Hint: letter ${index + 1} is ${displayWord(letter)}.`;
+}
+
+function renderHintStrip() {
+  if (!hintStripEl || !hintCellsEl) return;
+  const wallet = loadTradeWallet();
+  const active = gameType === "normal" && targets.length === 1 && !done;
+  const show = active && (wallet.hints > 0 || normalHintReveals.length > 0);
+  hintStripEl.hidden = !show;
+  if (hintButton) {
+    hintButton.textContent = `Hint (${wallet.hints})`;
+    hintButton.disabled = wallet.hints < 1;
+  }
+  hintCellsEl.innerHTML = "";
+  if (!show) return;
+  for (let index = 0; index < WORD_LENGTH; index += 1) {
+    const cell = document.createElement("span");
+    cell.className = "hint-cell";
+    const reveal = normalHintReveals.find((entry) => entry.index === index);
+    if (reveal) {
+      cell.classList.add("revealed");
+      cell.textContent = displayWord(reveal.letter);
+    }
+    hintCellsEl.append(cell);
+  }
+}
+
+if (hintButton) {
+  hintButton.addEventListener("click", useLetterHint);
+}
+
+window.setInterval(() => {
+  if (gameType === "trade") renderTradePanel();
+}, 30000);
+
 function finalMessage(status) {
   const result = resultPayload(status);
   if (status === "failed") {
@@ -22154,6 +22581,8 @@ async function bootPetkoApp() {
   await loadOnlineWords().catch(() => {});
   syncWeekendWitchAvatarState();
   weekendWitchChallengeBonus();
+  ensureTradeWelcomeBonus();
+  updateTradeBadge();
   refreshManualChallengeCredit().catch(() => {});
   const incomingChallengeCode = new URLSearchParams(window.location.search).get("challenge");
   if (incomingChallengeCode) {

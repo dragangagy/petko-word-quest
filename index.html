@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=6">
     <link rel="icon" href="app-icon-store.png" type="image/png">
     <link rel="apple-touch-icon" href="app-icon-store.png">
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=7">
   </head>
   <body>
     <div class="petko-splash" id="petkoSplash" role="dialog" aria-label="Petko Word Quest" aria-modal="true">
@@ -76,6 +76,7 @@
         <button class="type-button" type="button" data-type="competitive">Competitive</button>
         <button class="type-button" type="button" data-type="challenge">Challenge</button>
         <button class="type-button" type="button" data-type="hall">Medals</button>
+        <button class="type-button trade-tab" type="button" data-type="trade">G-Lab Trade</button>
       </section>
 
       <section class="normal-stats" id="normalStats" aria-live="polite"></section>
@@ -111,6 +112,26 @@
         <div class="hall-grid" id="hallGrid"></div>
       </section>
 
+      <section class="trade-panel" id="tradePanel" hidden aria-live="polite">
+        <div class="trade-head">
+          <img class="trade-logo" src="glab-logo-neon.png" alt="G-Lab">
+          <div class="trade-title">
+            <span>G-Lab Trade</span>
+            <small id="tradeCountdown">New prices soon</small>
+          </div>
+          <div class="trade-balance-pill" aria-label="G-Coin balance">
+            <strong id="tradeBalance">0</strong>
+            <span>G-Coins</span>
+          </div>
+        </div>
+        <p class="trade-earn-note">Earn G-Coins by winning: Classic +1 · Competitive levels +1/+2/+4/+8 · Challenge +5.</p>
+        <div class="trade-market" id="tradeMarket"></div>
+        <div class="trade-inventory" id="tradeInventory"></div>
+        <p class="trade-message" id="tradeMessage" aria-live="polite"></p>
+        <div class="trade-ledger-head">Recent trades</div>
+        <ol class="trade-ledger" id="tradeLedger"></ol>
+      </section>
+
       <button class="next-button" id="nextLevelButton" type="button" hidden>Next</button>
 
       <section class="mode-row" aria-label="Word count">
@@ -144,6 +165,11 @@
       </section>
 
       <section class="boards" id="boards" aria-label="Game boards"></section>
+
+      <section class="hint-strip" id="hintStrip" hidden aria-live="polite">
+        <button class="hint-use-button" id="hintButton" type="button">Hint (0)</button>
+        <div class="hint-cells" id="hintCells"></div>
+      </section>
 
       <section class="word-reveal" id="wordReveal" hidden aria-live="polite">
         <div class="word-reveal-word" id="wordRevealText"></div>
@@ -242,6 +268,18 @@
           </ul>
         </details>
         <details class="help-section">
+          <summary>G-Lab Trade</summary>
+          <ul>
+            <li>G-Lab Trade is the in-game market. The currency is G-Coins.</li>
+            <li>Earn G-Coins by winning: Classic +1, Competitive levels +1/+2/+4/+8, Challenge +5.</li>
+            <li>Letter Hint reveals one letter of the word during a Classic game.</li>
+            <li>Streak Shield is spent instead of your Classic streaks when a game fails.</li>
+            <li>Extra Challenge adds +1 allowed challenge for that day.</li>
+            <li>Prices change every day. Discounts and markups show a percent tag.</li>
+            <li>G-Coins never affect Competitive points or the leaderboards.</li>
+          </ul>
+        </details>
+        <details class="help-section">
           <summary>Profile</summary>
           <ul>
             <li>Open your profile by tapping the small avatar window near the top of the game.</li>
@@ -325,6 +363,6 @@
       </article>
     </div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
   </body>
 </html>

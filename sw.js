@@ -1,4 +1,4 @@
-const CACHE_NAME = "pwq-cache-v6";
+const CACHE_NAME = "pwq-cache-v7";
 
 const ASSETS = [
   "./",
@@ -9,6 +9,7 @@ const ASSETS = [
 
   "./logo-cut.png",
   "./logo-icon.png",
+  "./glab-logo-neon.png",
   "./app-icon-store.png",
   "./app-icon-maskable-v2.png",
   "./petko-logo.png",
