@@ -7,10 +7,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Petko Word Quest">
     <title>Petko Word Quest</title>
-    <link rel="manifest" href="manifest.webmanifest?v=6">
+    <link rel="manifest" href="manifest.webmanifest?v=7">
     <link rel="icon" href="app-icon-store.png" type="image/png">
     <link rel="apple-touch-icon" href="app-icon-store.png">
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=7">
   </head>
   <body>
     <div class="petko-splash" id="petkoSplash" role="dialog" aria-label="Petko Word Quest" aria-modal="true">
@@ -76,6 +76,7 @@
         <button class="type-button" type="button" data-type="competitive">Competitive</button>
         <button class="type-button" type="button" data-type="challenge">Challenge</button>
         <button class="type-button" type="button" data-type="hall">Medals</button>
+        <button class="type-button" type="button" data-type="trade">Trade</button>
       </section>
 
       <section class="normal-stats" id="normalStats" aria-live="polite"></section>
@@ -100,6 +101,21 @@
           <button id="checkChallengeButton" type="button" hidden>Check</button>
         </div>
         <div class="challenge-history" id="challengeHistory"></div>
+      </section>
+
+      <section class="trade-panel" id="tradePanel" hidden aria-live="polite">
+        <div class="trade-head">
+          <span>G-Lab Trade</span>
+          <button id="refreshTradeButton" type="button">Refresh</button>
+        </div>
+        <div class="trade-credits" id="tradeCredits">Credits 0</div>
+        <div class="trade-tabs" role="tablist" aria-label="Trade section">
+          <button class="active" id="tradeShopTab" type="button" data-trade-tab="shop">Shop</button>
+          <button id="tradeOffersTab" type="button" data-trade-tab="offers">Offers</button>
+        </div>
+        <div class="trade-copy" id="tradeStatus">Earn credits by playing, then buy tradable avatar copies or swap with another player.</div>
+        <div class="trade-shop" id="tradeShop"></div>
+        <div class="trade-offers" id="tradeOffers" hidden></div>
       </section>
 
       <section class="hall-panel" id="hallPanel" hidden aria-live="polite">
@@ -242,6 +258,18 @@
           </ul>
         </details>
         <details class="help-section">
+          <summary>G-Lab Trade</summary>
+          <ul>
+            <li>Trade is a G-Lab catalog, not real-money commerce and not a gambling product.</li>
+            <li>Playing awards G-Lab credits: Classic wins (up to 5 a day), Competitive levels, and Challenges.</li>
+            <li>Spend credits in the shop to buy a tradable copy of an achievement avatar.</li>
+            <li>Achievement unlocks still let you wear an avatar. A tradable copy is required to list it for a swap.</li>
+            <li>List a copy you own, then send an offer: your avatar for another player's listed avatar.</li>
+            <li>Weekend Witch Hunt avatars stay event-only and cannot be bought or traded.</li>
+            <li>Player-to-player offers sync online after the G-Lab Trade SQL is applied in Supabase.</li>
+          </ul>
+        </details>
+        <details class="help-section">
           <summary>Profile</summary>
           <ul>
             <li>Open your profile by tapping the small avatar window near the top of the game.</li>
@@ -314,6 +342,29 @@
       </article>
     </div>
 
+    <div class="trade-modal" id="tradeOfferModal" hidden>
+      <article class="trade-modal-card" role="dialog" aria-modal="true" aria-labelledby="tradeOfferTitle">
+        <button class="trade-modal-close" id="tradeOfferClose" type="button" aria-label="Close">×</button>
+        <h2 id="tradeOfferTitle">Propose trade</h2>
+        <label class="trade-offer-label" for="tradeOfferPlayer">Player</label>
+        <select id="tradeOfferPlayer" aria-label="Trade partner">
+          <option value="">Choose a player</option>
+        </select>
+        <div class="trade-offer-swap">
+          <div>
+            <span>You offer</span>
+            <div class="trade-mini-grid" id="tradeOfferMine"></div>
+          </div>
+          <div>
+            <span>You want</span>
+            <div class="trade-mini-grid" id="tradeOfferTheirs"></div>
+          </div>
+        </div>
+        <p class="trade-offer-message" id="tradeOfferMessage">Choose a player who listed an avatar.</p>
+        <button class="trade-offer-submit" id="tradeOfferSubmit" type="button" disabled>Send offer</button>
+      </article>
+    </div>
+
     <div class="hall-modal" id="hallModal" hidden>
       <article class="hall-modal-card" role="dialog" aria-modal="true" aria-labelledby="hallModalTitle">
         <button class="hall-modal-close" id="hallModalClose" type="button" aria-label="Close">×</button>
@@ -325,6 +376,7 @@
       </article>
     </div>
 
-  <script src="app.js?v=6"></script>
+  <script src="trade-module.js?v=7"></script>
+  <script src="app.js?v=7"></script>
   </body>
 </html>

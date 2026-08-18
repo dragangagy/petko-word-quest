@@ -1,10 +1,11 @@
-const CACHE_NAME = "pwq-cache-v6";
+const CACHE_NAME = "pwq-cache-v7";
 
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./trade-module.js",
   "./manifest.webmanifest",
 
   "./logo-cut.png",

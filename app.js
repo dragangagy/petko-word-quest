@@ -14921,6 +14921,7 @@ const WEEKEND_WITCH_KEY = "pwq-weekend-witch-v1";
 const WEEKEND_WITCH_PREVIOUS_AVATAR_KEY = "pwq-weekend-witch-previous-avatar-v1";
 const WEEKEND_WITCH_PROMPT_KEY = "pwq-weekend-witch-prompt-v1";
 const WEEKEND_WITCH_CHALLENGE_BONUS_KEY = "pwq-weekend-witch-challenge-bonus-v1";
+const GLAB_TRADE_KEY = "pwq-glab-trade-v1";
 const WEEKEND_WITCH_CHALLENGE_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const WEEKEND_WITCH_AVATAR_IDS = ["female-41", "female-42", "female-43", "female-44", "female-45"];
 const USED_WORDS_KEY = "pwq-used-words-v2";
@@ -15081,7 +15082,8 @@ const SUPABASE_CONFIG = {
   weekendResultsTable: "weekend_results",
   normalStatsTable: "normal_stats",
   playersTable: "players",
-  wordsTable: "words"
+  wordsTable: "words",
+  tradesTable: "avatar_trades"
 };
 
 const boardsEl = document.querySelector("#boards");
@@ -15176,6 +15178,21 @@ const hallModalHolder = document.querySelector("#hallModalHolder");
 const hallTopList = document.querySelector("#hallTopList");
 const hallFormula = document.querySelector("#hallFormula");
 const hallModalClose = document.querySelector("#hallModalClose");
+const tradePanelEl = document.querySelector("#tradePanel");
+const tradeCreditsEl = document.querySelector("#tradeCredits");
+const tradeStatusEl = document.querySelector("#tradeStatus");
+const tradeShopEl = document.querySelector("#tradeShop");
+const tradeOffersEl = document.querySelector("#tradeOffers");
+const refreshTradeButton = document.querySelector("#refreshTradeButton");
+const tradeShopTab = document.querySelector("#tradeShopTab");
+const tradeOffersTab = document.querySelector("#tradeOffersTab");
+const tradeOfferModal = document.querySelector("#tradeOfferModal");
+const tradeOfferClose = document.querySelector("#tradeOfferClose");
+const tradeOfferPlayer = document.querySelector("#tradeOfferPlayer");
+const tradeOfferMineEl = document.querySelector("#tradeOfferMine");
+const tradeOfferTheirsEl = document.querySelector("#tradeOfferTheirs");
+const tradeOfferMessage = document.querySelector("#tradeOfferMessage");
+const tradeOfferSubmit = document.querySelector("#tradeOfferSubmit");
 const shareButton = document.querySelector("#shareButton");
 const exitButton = document.querySelector("#exitButton");
 const nextLevelButton = document.querySelector("#nextLevelButton");
@@ -16060,6 +16077,10 @@ function playersTable() {
 
 function wordsTable() {
   return SUPABASE_CONFIG.wordsTable || "words";
+}
+
+function tradesTable() {
+  return SUPABASE_CONFIG.tradesTable || "avatar_trades";
 }
 
 function normalizeOnlineWordRows(rows = []) {
@@ -18861,6 +18882,7 @@ async function finishChallenge(status) {
   messageEl.textContent = status === "finished"
     ? `Challenge solved: ${solvedCount}/6. Score ${resultScore}.`
     : `Challenge finished: ${solvedCount}/6. Answers: ${displayWords(targets)}. Score ${resultScore}.`;
+  awardGlabTradeChallenge(status);
   if (!activeChallenge?.code || !supabaseConfigured()) return;
   const prefix = activeChallenge.role === "creator" ? "creator" : "opponent";
   const patch = {
@@ -19027,6 +19049,7 @@ function isProfileAvatarUnlocked(avatar = {}, stats = avatarAchievementStats || 
   if (avatar.adminOnly) return false;
   // Lovac i Veštice su isključivo sezonski avatari — zaključani su van Witch Hunta.
   if (isWeekendEventAvatarId(avatar.id)) return isWeekendWitchActive();
+  if (window.GlabTrade && GlabTrade.owns(loadGlabTradeState(), avatar.id)) return true;
   const info = profileAvatarUnlockInfo(avatar);
   return !info || info.unlocked(stats);
 }
@@ -19355,7 +19378,7 @@ function renderProfileAvatarGrid(group = "male") {
   if (witchPicker) group = "female";
   if (profileAvatarUnlockNote) profileAvatarUnlockNote.textContent = witchPicker
     ? "During Witch Hunt you can choose one of five Witches."
-    : "Your achievements will unlock new avatars.";
+    : "Your achievements unlock new avatars. G-Lab Trade can also sell tradable copies.";
   profileAvatarTabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.avatarTab === group));
   const visibleAvatars = witchPicker
     ? weekendWitchAvatars()
@@ -19514,6 +19537,15 @@ function renamePlayerLocally(oldName, newName) {
     }
   });
   saveChallengeProgressStore(progressStore);
+  if (window.GlabTrade) {
+    const tradeState = loadGlabTradeState();
+    tradeState.offers = tradeState.offers.map((offer) => ({
+      ...offer,
+      offerer: sameChallengeName(offer.offerer, oldName) ? newName : offer.offerer,
+      receiver: sameChallengeName(offer.receiver, oldName) ? newName : offer.receiver
+    }));
+    saveGlabTradeState(tradeState, { silent: true });
+  }
 }
 
 async function renamePlayerEverywhere(oldName, newName) {
@@ -19528,6 +19560,8 @@ async function renamePlayerEverywhere(oldName, newName) {
     patchSupabaseRows(`${normalStatsTable()}?nickname=eq.${oldFilter}`, { nickname: newName }),
     patchSupabaseRows(`${challengeTable()}?creator=eq.${oldFilter}`, { creator: newName }),
     patchSupabaseRows(`${challengeTable()}?opponent=eq.${oldFilter}`, { opponent: newName }),
+    patchSupabaseRows(`${tradesTable()}?offerer=eq.${oldFilter}`, { offerer: newName }),
+    patchSupabaseRows(`${tradesTable()}?receiver=eq.${oldFilter}`, { receiver: newName }),
     callSupabaseRpc("rename_challenge_stats_player", { old_name: oldName, new_name: newName })
   ]);
 }
@@ -20048,6 +20082,10 @@ function startGame(nextType = gameType, requestedMode, options = {}) {
     setProfileMessage("To start playing, choose a nickname and avatar.");
     return;
   }
+  if (nextType === "trade") {
+    showTradeModule();
+    return;
+  }
   if (nextType === "challenge") {
     showChallengeIntro();
     return;
@@ -20429,6 +20467,7 @@ function submitGuess() {
       finishChallenge("finished");
     } else {
       bumpNormalFinished();
+      awardGlabTradeClassicWin();
       const challengeText = recordNormalChallengeWin();
       const fridayText = recordFridayNormalWin();
       const normalWinText = [fridayText, challengeText].filter(Boolean).join(" ");
@@ -21312,6 +21351,576 @@ function showHallOfFame() {
   renderHallOfFame();
 }
 
+let glabTradeTab = "shop";
+let glabTradeListings = new Map();
+let tradeOfferMineId = "";
+let tradeOfferTheirsId = "";
+
+function loadGlabTradeState() {
+  if (!window.GlabTrade) {
+    return { credits: 0, owned: [], listed: [], awards: {}, offers: [] };
+  }
+  try {
+    return GlabTrade.normalizeState(JSON.parse(localStorage.getItem(GLAB_TRADE_KEY) || "{}"));
+  } catch {
+    return GlabTrade.emptyState();
+  }
+}
+
+function saveGlabTradeState(state, options = {}) {
+  const next = window.GlabTrade ? GlabTrade.normalizeState(state) : state;
+  localStorage.setItem(GLAB_TRADE_KEY, JSON.stringify(next));
+  updateTradeBadge();
+  if (!options.silent && gameType === "trade") renderTradePanel();
+  if (!options.skipSync) syncGlabTradeProfile().catch(() => false);
+  return next;
+}
+
+function setTradeStatus(text) {
+  if (tradeStatusEl) tradeStatusEl.textContent = text || "";
+}
+
+function updateTradeBadge() {
+  const button = typeButtons.find((item) => item.dataset.type === "trade");
+  if (!button || !window.GlabTrade) return;
+  const incoming = GlabTrade.incomingPending(loadGlabTradeState(), loadPlayerName()).length;
+  if (incoming) button.dataset.receivedCount = String(incoming);
+  else delete button.dataset.receivedCount;
+}
+
+function tradableCatalog() {
+  return UNLOCKABLE_PROFILE_AVATARS.filter((avatar) => window.GlabTrade && GlabTrade.isTradableAvatar(avatar));
+}
+
+function setGlabTradeTab(tab) {
+  glabTradeTab = tab === "offers" ? "offers" : "shop";
+  if (tradeShopTab) tradeShopTab.classList.toggle("active", glabTradeTab === "shop");
+  if (tradeOffersTab) tradeOffersTab.classList.toggle("active", glabTradeTab === "offers");
+  if (tradeShopEl) tradeShopEl.hidden = glabTradeTab !== "shop";
+  if (tradeOffersEl) tradeOffersEl.hidden = glabTradeTab !== "offers";
+}
+
+function applyGlabTradeAward(result, message) {
+  if (!result || !result.awarded) return;
+  saveGlabTradeState(result.state);
+  if (gameType === "trade") setTradeStatus(message.replace("{n}", String(result.awarded)));
+}
+
+function awardGlabTradeClassicWin() {
+  if (!window.GlabTrade) return;
+  applyGlabTradeAward(
+    GlabTrade.awardClassicWin(loadGlabTradeState(), todayId()),
+    "+{n} G-Lab credit for a Classic win."
+  );
+}
+
+function awardGlabTradeCompetitive(status) {
+  if (!window.GlabTrade) return;
+  const levels = Math.max(0, Number(competitiveCompleted) || 0);
+  applyGlabTradeAward(
+    GlabTrade.awardCompetitiveFinish(loadGlabTradeState(), todayId(), levels),
+    "+{n} G-Lab credits from Competitive."
+  );
+}
+
+function awardGlabTradeChallenge(status) {
+  if (!window.GlabTrade || !activeChallenge?.code) return;
+  applyGlabTradeAward(
+    GlabTrade.awardChallengeResult(loadGlabTradeState(), todayId(), activeChallenge.code, status === "finished"),
+    "+{n} G-Lab credits from Challenge."
+  );
+}
+
+async function syncGlabTradeProfile() {
+  if (!supabaseConfigured() || !window.GlabTrade) return false;
+  const name = normalizePlayerName(loadPlayerName() || "");
+  if (!name) return false;
+  const state = loadGlabTradeState();
+  const payload = {
+    glab_credits: state.credits,
+    owned_avatars: state.owned,
+    listed_avatars: state.listed
+  };
+  const byDevice = await patchSupabaseRows(`${playersTable()}?device_id=eq.${encodeURIComponent(profileDeviceId())}`, payload);
+  if (byDevice) return true;
+  return patchSupabaseRows(`${playersTable()}?nickname=eq.${encodeURIComponent(name)}`, payload);
+}
+
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+async function fetchGlabTradePlayerRows() {
+  if (!supabaseConfigured()) return [];
+  const query = [
+    "select=nickname,device_id,glab_credits,owned_avatars,listed_avatars",
+    "order=nickname.asc",
+    "limit=1000"
+  ].join("&");
+  const response = await fetch(supabaseUrl(`${playersTable()}?${query}`), { headers: supabaseHeaders() });
+  if (!response.ok) return [];
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function fetchGlabTradeOffers() {
+  const name = loadPlayerName();
+  if (!supabaseConfigured() || !name) return [];
+  const encoded = encodeURIComponent(name);
+  const query = [
+    "select=code,created_at,offerer,offerer_device,receiver,receiver_device,offer_avatar,request_avatar,status",
+    `or=(offerer.eq.${encoded},receiver.eq.${encoded})`,
+    "order=created_at.desc",
+    "limit=80"
+  ].join("&");
+  const response = await fetch(supabaseUrl(`${tradesTable()}?${query}`), { headers: supabaseHeaders() });
+  if (!response.ok) return [];
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows.map((row) => window.GlabTrade.normalizeOffer(row)).filter(Boolean) : [];
+}
+
+async function hydrateGlabTradeFromProfile() {
+  if (!window.GlabTrade) return loadGlabTradeState();
+  const local = loadGlabTradeState();
+  const rows = await fetchGlabTradePlayerRows().catch(() => []);
+  const mine = (rows || []).find((row) => (
+    sameChallengeName(row.nickname, loadPlayerName()) || row.device_id === profileDeviceId()
+  ));
+  if (!mine) return local;
+  const remoteOwned = parseJsonArray(mine.owned_avatars);
+  const remoteListed = parseJsonArray(mine.listed_avatars);
+  const remoteCredits = Math.max(0, Number(mine.glab_credits) || 0);
+  if (local.credits === 0 && local.owned.length === 0 && (remoteCredits || remoteOwned.length)) {
+    return saveGlabTradeState({
+      ...local,
+      credits: remoteCredits,
+      owned: remoteOwned,
+      listed: remoteListed
+    }, { silent: true });
+  }
+  return local;
+}
+
+async function refreshGlabTradeNetwork() {
+  if (!window.GlabTrade) return;
+  await hydrateGlabTradeFromProfile().catch(() => loadGlabTradeState());
+  const [rows, offers] = await Promise.all([
+    fetchGlabTradePlayerRows().catch(() => []),
+    fetchGlabTradeOffers().catch(() => [])
+  ]);
+  glabTradeListings = new Map();
+  (rows || []).forEach((row) => {
+    const name = cleanChallengeName(row.nickname);
+    if (!name || sameChallengeName(name, loadPlayerName())) return;
+    glabTradeListings.set(name, parseJsonArray(row.listed_avatars));
+  });
+  let state = loadGlabTradeState();
+  (offers || []).forEach((offer) => {
+    state = GlabTrade.upsertOffer(state, offer);
+  });
+  saveGlabTradeState(state, { skipSync: true });
+}
+
+function tradeAvatarButton(avatar, options = {}) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = options.className || "trade-shop-card";
+  button.dataset.avatarId = avatar.id;
+  if (options.owned) button.classList.add("owned");
+  if (options.listed) button.classList.add("listed");
+  if (options.weekend) button.classList.add("weekend");
+  if (options.active) button.classList.add("active");
+  if (avatar.src) {
+    const image = document.createElement("img");
+    image.src = avatar.src;
+    image.alt = avatar.label;
+    image.loading = "lazy";
+    button.append(image);
+  }
+  const name = document.createElement("span");
+  name.className = "trade-shop-name";
+  name.textContent = avatar.label;
+  button.append(name);
+  if (options.meta) {
+    const meta = document.createElement("span");
+    meta.className = "trade-shop-meta";
+    meta.textContent = options.meta;
+    button.append(meta);
+  }
+  if (options.onClick) button.addEventListener("click", options.onClick);
+  return button;
+}
+
+function renderTradeShop() {
+  if (!tradeShopEl || !window.GlabTrade) return;
+  tradeShopEl.innerHTML = "";
+  const state = loadGlabTradeState();
+  const stats = avatarAchievementStats || emptyAvatarAchievementStats();
+  tradableCatalog().forEach((avatar) => {
+    const item = GlabTrade.shopItem(avatar, state, isProfileAvatarUnlocked(avatar, stats) && !GlabTrade.owns(state, avatar.id));
+    let meta = `${item.price} cr.`;
+    if (item.owned && item.listed) meta = "Listed";
+    else if (item.owned) meta = "Owned";
+    else if (item.earned) meta = `Earned · ${item.price} cr.`;
+    const button = tradeAvatarButton(avatar, {
+      owned: item.owned,
+      listed: item.listed,
+      meta,
+      onClick: () => handleTradeShopClick(avatar, item)
+    });
+    tradeShopEl.append(button);
+  });
+}
+
+function handleTradeShopClick(avatar, item) {
+  if (!window.GlabTrade) return;
+  if (item.owned) {
+    const toggled = GlabTrade.toggleListed(loadGlabTradeState(), avatar.id);
+    if (!toggled.ok) {
+      setTradeStatus(toggled.error);
+      return;
+    }
+    saveGlabTradeState(toggled.state);
+    setTradeStatus(GlabTrade.listed(toggled.state, avatar.id)
+      ? `${avatar.label} is listed for trade.`
+      : `${avatar.label} is no longer listed.`);
+    return;
+  }
+  const bought = GlabTrade.buy(loadGlabTradeState(), avatar);
+  if (!bought.ok) {
+    setTradeStatus(bought.error);
+    return;
+  }
+  saveGlabTradeState(bought.state);
+  setTradeStatus(`Bought ${avatar.label} for ${bought.price} credits. Tap it again to list it.`);
+  renderProfileAvatarGrid();
+}
+
+function renderTradeOfferCard(offer) {
+  const me = loadPlayerName();
+  const card = document.createElement("article");
+  card.className = `trade-offer-card ${offer.status}`;
+  const offerAvatar = profileAvatarById(offer.offerAvatar);
+  const requestAvatar = profileAvatarById(offer.requestAvatar);
+  const pair = document.createElement("div");
+  pair.className = "trade-offer-pair";
+  const left = document.createElement("div");
+  left.className = "trade-offer-avatar";
+  if (offerAvatar?.src) {
+    const img = document.createElement("img");
+    img.src = offerAvatar.src;
+    img.alt = offerAvatar.label;
+    left.append(img);
+  }
+  left.append(document.createTextNode(`${offer.offerer}: ${offerAvatar?.label || offer.offerAvatar}`));
+  const arrow = document.createElement("div");
+  arrow.className = "trade-offer-arrow";
+  arrow.textContent = "⇄";
+  const right = document.createElement("div");
+  right.className = "trade-offer-avatar";
+  if (requestAvatar?.src) {
+    const img = document.createElement("img");
+    img.src = requestAvatar.src;
+    img.alt = requestAvatar.label;
+    right.append(img);
+  }
+  right.append(document.createTextNode(`${offer.receiver}: ${requestAvatar?.label || offer.requestAvatar}`));
+  pair.append(left, arrow, right);
+  const status = document.createElement("div");
+  status.className = "trade-copy";
+  status.textContent = `${offer.code} · ${offer.status}`;
+  card.append(pair, status);
+  if (offer.status === "pending") {
+    const actions = document.createElement("div");
+    actions.className = "trade-offer-actions";
+    if (sameChallengeName(offer.receiver, me)) {
+      const accept = document.createElement("button");
+      accept.className = "trade-action-button";
+      accept.type = "button";
+      accept.textContent = "Accept";
+      accept.addEventListener("click", () => acceptGlabTrade(offer).catch(() => setTradeStatus("Accepting the trade failed.")));
+      const decline = document.createElement("button");
+      decline.className = "trade-action-button";
+      decline.type = "button";
+      decline.textContent = "Decline";
+      decline.addEventListener("click", () => closeGlabTrade(offer, "declined").catch(() => setTradeStatus("Declining the trade failed.")));
+      actions.append(accept, decline);
+    } else {
+      const cancel = document.createElement("button");
+      cancel.className = "trade-action-button";
+      cancel.type = "button";
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", () => closeGlabTrade(offer, "cancelled").catch(() => setTradeStatus("Canceling the trade failed.")));
+      actions.append(cancel);
+    }
+    card.append(actions);
+  }
+  return card;
+}
+
+function renderTradeOffers() {
+  if (!tradeOffersEl || !window.GlabTrade) return;
+  tradeOffersEl.innerHTML = "";
+  const state = loadGlabTradeState();
+  const me = loadPlayerName();
+  const incoming = GlabTrade.incomingPending(state, me);
+  const outgoing = GlabTrade.outgoingPending(state, me);
+  const listed = state.listed.map((id) => profileAvatarById(id)).filter(Boolean);
+
+  const listTitle = document.createElement("div");
+  listTitle.className = "trade-section-title";
+  listTitle.textContent = listed.length ? "Your listings" : "No listings yet";
+  tradeOffersEl.append(listTitle);
+  if (listed.length) {
+    const grid = document.createElement("div");
+    grid.className = "trade-mini-grid";
+    listed.forEach((avatar) => {
+      grid.append(tradeAvatarButton(avatar, {
+        className: "trade-mini-option owned listed",
+        meta: "Listed",
+        onClick: () => handleTradeShopClick(avatar, { owned: true, listed: true })
+      }));
+    });
+    tradeOffersEl.append(grid);
+  }
+
+  const propose = document.createElement("button");
+  propose.className = "trade-action-button";
+  propose.type = "button";
+  propose.textContent = "Propose trade";
+  propose.addEventListener("click", () => openTradeOfferModal());
+  tradeOffersEl.append(propose);
+
+  const incomingTitle = document.createElement("div");
+  incomingTitle.className = "trade-section-title";
+  incomingTitle.textContent = incoming.length ? "Incoming offers" : "No incoming offers";
+  tradeOffersEl.append(incomingTitle);
+  incoming.forEach((offer) => tradeOffersEl.append(renderTradeOfferCard(offer)));
+
+  const outgoingTitle = document.createElement("div");
+  outgoingTitle.className = "trade-section-title";
+  outgoingTitle.textContent = outgoing.length ? "Your offers" : "No sent offers";
+  tradeOffersEl.append(outgoingTitle);
+  outgoing.forEach((offer) => tradeOffersEl.append(renderTradeOfferCard(offer)));
+}
+
+function renderTradePanel(statusText) {
+  if (!tradePanelEl) return;
+  tradePanelEl.hidden = gameType !== "trade";
+  const state = loadGlabTradeState();
+  if (tradeCreditsEl) tradeCreditsEl.textContent = `Credits ${formatScore(state.credits)}`;
+  if (statusText) setTradeStatus(statusText);
+  else if (tradeStatusEl && !tradeStatusEl.textContent) {
+    setTradeStatus("Earn credits by playing, then buy tradable avatar copies or swap with another player.");
+  }
+  setGlabTradeTab(glabTradeTab);
+  renderTradeShop();
+  renderTradeOffers();
+  updateTradeBadge();
+}
+
+function showTradeModule() {
+  gameType = "trade";
+  done = true;
+  activeChallenge = null;
+  competitiveIntro = false;
+  competitiveRunActive = false;
+  document.body.dataset.gameType = gameType;
+  document.body.dataset.competitiveLocked = "false";
+  document.body.dataset.competitiveIntro = "false";
+  document.body.dataset.challengePlaying = "false";
+  document.body.dataset.challengeFinished = "false";
+  boardsEl.innerHTML = "";
+  keyboardEl.innerHTML = "";
+  renderSolutionsPanel(false);
+  hideWordReveal();
+  nextLevelButton.hidden = true;
+  modeLabelEl.textContent = "Trade";
+  messageEl.textContent = "G-Lab catalog";
+  tryCountEl.textContent = "0";
+  typeButtons.forEach((button) => button.classList.toggle("active", button.dataset.type === gameType));
+  updateModeButtons();
+  updateScoreDisplay();
+  if (!window.GlabTrade) {
+    renderTradePanel("Trade module failed to load.");
+    return;
+  }
+  renderTradePanel();
+  refreshGlabTradeNetwork().then(() => {
+    if (gameType === "trade") renderTradePanel();
+  }).catch(() => {
+    if (gameType === "trade") setTradeStatus("Shop works locally. Run sql/g-lab-trade-module.sql to sync offers online.");
+  });
+}
+
+function fillTradeMiniGrid(container, avatars, selectedId, onPick) {
+  if (!container) return;
+  container.innerHTML = "";
+  avatars.forEach((avatar) => {
+    container.append(tradeAvatarButton(avatar, {
+      className: "trade-mini-option",
+      active: avatar.id === selectedId,
+      meta: avatar.label,
+      onClick: () => onPick(avatar.id)
+    }));
+  });
+}
+
+function currentTradePartnerListings() {
+  const name = tradeOfferPlayer?.value || "";
+  return (glabTradeListings.get(name) || []).map((id) => profileAvatarById(id)).filter(Boolean);
+}
+
+function renderTradeOfferPicker() {
+  const state = loadGlabTradeState();
+  const mine = state.owned.map((id) => profileAvatarById(id)).filter(Boolean);
+  fillTradeMiniGrid(tradeOfferMineEl, mine, tradeOfferMineId, (id) => {
+    tradeOfferMineId = id;
+    renderTradeOfferPicker();
+  });
+  fillTradeMiniGrid(tradeOfferTheirsEl, currentTradePartnerListings(), tradeOfferTheirsId, (id) => {
+    tradeOfferTheirsId = id;
+    renderTradeOfferPicker();
+  });
+  const partner = tradeOfferPlayer?.value || "";
+  const ready = Boolean(partner && tradeOfferMineId && tradeOfferTheirsId);
+  if (tradeOfferSubmit) tradeOfferSubmit.disabled = !ready;
+  if (tradeOfferMessage) {
+    if (!partner) tradeOfferMessage.textContent = "Choose a player who listed an avatar.";
+    else if (!currentTradePartnerListings().length) tradeOfferMessage.textContent = `${partner} has not listed a tradable avatar.`;
+    else if (!mine.length) tradeOfferMessage.textContent = "Buy a tradable copy in the shop before you offer a swap.";
+    else tradeOfferMessage.textContent = ready ? "Send this swap offer." : "Pick one avatar on each side.";
+  }
+}
+
+function openTradeOfferModal() {
+  if (!tradeOfferModal) return;
+  tradeOfferMineId = "";
+  tradeOfferTheirsId = "";
+  if (tradeOfferPlayer) {
+    tradeOfferPlayer.innerHTML = "";
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "Choose a player";
+    tradeOfferPlayer.append(blank);
+    [...glabTradeListings.keys()].sort((a, b) => a.localeCompare(b, "en-US")).forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = `${name} (${(glabTradeListings.get(name) || []).length})`;
+      tradeOfferPlayer.append(option);
+    });
+  }
+  renderTradeOfferPicker();
+  tradeOfferModal.hidden = false;
+}
+
+function closeTradeOfferModal() {
+  if (tradeOfferModal) tradeOfferModal.hidden = true;
+}
+
+async function submitTradeOffer() {
+  if (!window.GlabTrade) return;
+  const created = GlabTrade.createOffer(loadGlabTradeState(), {
+    offerer: loadPlayerName(),
+    offererDevice: profileDeviceId(),
+    receiver: tradeOfferPlayer?.value || "",
+    offerAvatar: tradeOfferMineId,
+    requestAvatar: tradeOfferTheirsId
+  });
+  if (!created.ok) {
+    if (tradeOfferMessage) tradeOfferMessage.textContent = created.error;
+    return;
+  }
+  saveGlabTradeState(created.state);
+  if (supabaseConfigured()) {
+    try {
+      const response = await fetch(supabaseUrl(tradesTable()), {
+        method: "POST",
+        headers: supabaseHeaders({ Prefer: "return=minimal" }),
+        body: JSON.stringify({
+          code: created.offer.code,
+          offerer: created.offer.offerer,
+          offerer_device: created.offer.offererDevice,
+          receiver: created.offer.receiver,
+          offer_avatar: created.offer.offerAvatar,
+          request_avatar: created.offer.requestAvatar,
+          status: "pending"
+        })
+      });
+      if (!response.ok) {
+        setTradeStatus("Offer saved locally. Run sql/g-lab-trade-module.sql to send it online.");
+        closeTradeOfferModal();
+        return;
+      }
+    } catch {
+      setTradeStatus("Offer saved locally. Online send failed.");
+      closeTradeOfferModal();
+      return;
+    }
+  }
+  closeTradeOfferModal();
+  setTradeStatus(`Offer ${created.offer.code} sent to ${created.offer.receiver}.`);
+  setGlabTradeTab("offers");
+  renderTradePanel();
+}
+
+async function patchTradeStatus(code, status) {
+  if (!supabaseConfigured()) return false;
+  return patchSupabaseRows(`${tradesTable()}?code=eq.${encodeURIComponent(code)}`, {
+    status,
+    updated_at: new Date().toISOString()
+  });
+}
+
+async function closeGlabTrade(offer, status) {
+  const next = window.GlabTrade.setOfferStatus(loadGlabTradeState(), offer.code, status);
+  saveGlabTradeState(next);
+  await patchTradeStatus(offer.code, status);
+  setTradeStatus(`Trade ${offer.code} ${status}.`);
+}
+
+async function acceptGlabTrade(offer) {
+  if (!window.GlabTrade) return;
+  const rows = await fetchGlabTradePlayerRows().catch(() => []);
+  const offererRow = (rows || []).find((row) => sameChallengeName(row.nickname, offer.offerer));
+  const theirOwned = [...parseJsonArray(offererRow?.owned_avatars), ...parseJsonArray(offererRow?.listed_avatars)];
+  const theirState = GlabTrade.normalizeState({
+    owned: theirOwned,
+    listed: parseJsonArray(offererRow?.listed_avatars),
+    credits: offererRow?.glab_credits || 0,
+    offers: [offer]
+  });
+  const accepted = GlabTrade.acceptOffer(loadGlabTradeState(), theirState, offer, loadPlayerName());
+  if (!accepted.ok) {
+    setTradeStatus(accepted.error);
+    return;
+  }
+  saveGlabTradeState(accepted.myState);
+  await patchTradeStatus(offer.code, "accepted");
+  if (offererRow) {
+    await patchSupabaseRows(`${playersTable()}?nickname=eq.${encodeURIComponent(offer.offerer)}`, {
+      owned_avatars: accepted.theirState.owned,
+      listed_avatars: accepted.theirState.listed
+    });
+  }
+  const wearing = loadProfileAvatarId();
+  if (wearing === offer.requestAvatar && !isProfileAvatarUnlocked(profileAvatarById(wearing))) {
+    const fallback = BASE_PROFILE_AVATARS.find((avatar) => avatar.group === (profileAvatarById(wearing)?.group || "male")) || PROFILE_AVATARS[0];
+    if (fallback) saveProfileAvatar(fallback.id);
+  }
+  setTradeStatus(`Accepted ${offer.code}. ${profileAvatarById(offer.offerAvatar)?.label || offer.offerAvatar} is now yours.`);
+  renderProfileAvatarGrid();
+}
+
 function finalMessage(status) {
   const result = resultPayload(status);
   if (status === "failed") {
@@ -21392,6 +22001,7 @@ function finishCompetitive(status) {
   saveTodayLock(result);
   upsertTodayResult(result);
   updateChallengeQuota();
+  awardGlabTradeCompetitive(status);
   submitOnlineResult(result)
     .then((sent) => {
       if (sent) {
@@ -21731,6 +22341,51 @@ if (checkChallengeButton) {
 if (refreshHallButton) {
   refreshHallButton.addEventListener("click", () => {
     renderHallOfFame();
+  });
+}
+
+if (refreshTradeButton) {
+  refreshTradeButton.addEventListener("click", () => {
+    refreshGlabTradeNetwork()
+      .then(() => renderTradePanel("Trade list refreshed."))
+      .catch(() => setTradeStatus("Shop works locally. Run sql/g-lab-trade-module.sql to sync offers online."));
+  });
+}
+
+if (tradeShopTab) {
+  tradeShopTab.addEventListener("click", () => {
+    setGlabTradeTab("shop");
+  });
+}
+
+if (tradeOffersTab) {
+  tradeOffersTab.addEventListener("click", () => {
+    setGlabTradeTab("offers");
+  });
+}
+
+if (tradeOfferClose) {
+  tradeOfferClose.addEventListener("click", closeTradeOfferModal);
+}
+
+if (tradeOfferModal) {
+  tradeOfferModal.addEventListener("click", (event) => {
+    if (event.target === tradeOfferModal) closeTradeOfferModal();
+  });
+}
+
+if (tradeOfferPlayer) {
+  tradeOfferPlayer.addEventListener("change", () => {
+    tradeOfferTheirsId = "";
+    renderTradeOfferPicker();
+  });
+}
+
+if (tradeOfferSubmit) {
+  tradeOfferSubmit.addEventListener("click", () => {
+    submitTradeOffer().catch(() => {
+      if (tradeOfferMessage) tradeOfferMessage.textContent = "Sending the trade failed.";
+    });
   });
 }
 
@@ -22104,6 +22759,10 @@ document.addEventListener("keydown", (event) => {
     closeHallModal();
     return;
   }
+  if (tradeOfferModal && !tradeOfferModal.hidden) {
+    closeTradeOfferModal();
+    return;
+  }
   setHelpOpen(false);
 });
 
@@ -22175,6 +22834,9 @@ if (initialNormalStats.started || initialNormalStats.finished) {
 }
 refreshOnlineNormalStats().catch(() => {});
 refreshAvatarAchievements({ popup: true }).catch(() => {});
+updateTradeBadge();
+hydrateGlabTradeFromProfile().then(() => updateTradeBadge()).catch(() => {});
+refreshGlabTradeNetwork().catch(() => {});
 window.setTimeout(maybeShowWeekendWitchOffer, 700);
 Promise.all([
   fetchChallengeHistory(),

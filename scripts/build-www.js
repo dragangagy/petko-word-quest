@@ -12,6 +12,7 @@ const ROOT_FILES = [
   "index.html",
   "styles.css",
   "app.js",
+  "trade-module.js",
   "manifest.webmanifest",
   "sw.js",
   "icon.svg",

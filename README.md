@@ -2,7 +2,7 @@
 
 Mobile-first English 5-letter word game for the US market.
 
-Independent from the Serbian Petko app. Same gameplay systems (Classic, Competitive, Challenge, Medals), new English word list, QWERTY keyboard, and a separate Supabase project.
+Independent from the Serbian Petko app. Same gameplay systems (Classic, Competitive, Challenge, Medals, G-Lab Trade), new English word list, QWERTY keyboard, and a separate Supabase project.
 
 ## GitHub Pages
 
@@ -13,6 +13,7 @@ Required files:
 - `index.html`
 - `styles.css`
 - `app.js`
+- `trade-module.js`
 - `manifest.webmanifest`
 - `sw.js`
 - image / avatar assets in this folder
@@ -21,7 +22,7 @@ Required files:
 
 Create a **new** Supabase project for Petko Word Quest. Do not reuse the Serbian Petko project.
 
-1. Run `supabase-schema.sql` in the SQL editor.
+1. Run `supabase-schema.sql` in the SQL editor (includes the G-Lab Trade tables). Existing projects can run `sql/g-lab-trade-module.sql` alone.
 2. Run scheduled SQL helpers under `sql/` as needed.
 3. Seed English words into `public.words` (generate from the `WORDS` list in `app.js`, or load online words after the table is ready).
 4. Set these values in `app.js`:
@@ -65,4 +66,5 @@ npm run cap:sync       # sync into android/ and ios/
 - Word length is 5 letters (A–Z).
 - Keyboard is QWERTY.
 - Local storage keys use the `pwq-` prefix so they do not collide with Serbian Petko on the same device.
+- **G-Lab Trade** awards in-game credits from play. Those credits buy tradable avatar copies and power player-to-player swaps. It is not real-money commerce.
 - This is not financial advice or a gambling product; it is a word puzzle game.
