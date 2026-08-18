@@ -14923,6 +14923,37 @@ const WEEKEND_WITCH_PROMPT_KEY = "pwq-weekend-witch-prompt-v1";
 const WEEKEND_WITCH_CHALLENGE_BONUS_KEY = "pwq-weekend-witch-challenge-bonus-v1";
 const WEEKEND_WITCH_CHALLENGE_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const WEEKEND_WITCH_AVATAR_IDS = ["female-41", "female-42", "female-43", "female-44", "female-45"];
+const TRADE_CAMPAIGNS_KEY = "pwq-trade-campaigns-v1";
+const TRADE_ROTATION_KEY = "pwq-trade-rotation-v1";
+const TRADE_DECK_KEY = "pwq-trade-deck-v1";
+const TRADE_STATS_KEY = "pwq-trade-stats-v1";
+const TRADE_EVENT_QUEUE_KEY = "pwq-trade-events-v1";
+const TRADE_CYCLE_MINUTES = 30;
+const TRADE_VISIBLE_MINUTES = 5;
+const TRADE_TICK_MS = 30000;
+const TRADE_EVENT_QUEUE_LIMIT = 40;
+const TRADE_CAMPAIGNS = [
+  {
+    id: "numerology",
+    title: "Numerology",
+    subtitle: "Astrology and Tarot by G-Lab",
+    cta: "Open app",
+    href: "https://dragangagy.github.io/numerology-app/",
+    label: "Open Numerology App",
+    image: "ad-numerology.png",
+    alt: "Numerology, Astrology and Tarot app",
+    weight: 3
+  },
+  {
+    id: "petko",
+    title: "Petko",
+    subtitle: "The original Serbian word game",
+    cta: "Play now",
+    href: "https://dragangagy.github.io/petko/",
+    label: "Open Petko, the Serbian word game",
+    weight: 1
+  }
+];
 const USED_WORDS_KEY = "pwq-used-words-v2";
 const WORD_DECK_KEY = "pwq-word-deck-v1";
 const ONLINE_WORDS_KEY = "pwq-online-words-v1";
@@ -15081,7 +15112,9 @@ const SUPABASE_CONFIG = {
   weekendResultsTable: "weekend_results",
   normalStatsTable: "normal_stats",
   playersTable: "players",
-  wordsTable: "words"
+  wordsTable: "words",
+  tradeCampaignsTable: "trade_campaigns",
+  tradeEventsTable: "trade_events"
 };
 
 const boardsEl = document.querySelector("#boards");
@@ -15111,6 +15144,12 @@ const helpModal = document.querySelector("#helpModal");
 const helpCloseButton = document.querySelector("#helpCloseButton");
 const normalStatsEl = document.querySelector("#normalStats");
 const statusLogoEl = document.querySelector(".status-logo");
+const tradeSlotEl = document.querySelector("#tradeSlot");
+const tradeSlotImageEl = document.querySelector("#tradeSlotImage");
+const tradeSlotCardEl = document.querySelector("#tradeSlotCard");
+const tradeSlotTitleEl = document.querySelector("#tradeSlotTitle");
+const tradeSlotSubtitleEl = document.querySelector("#tradeSlotSubtitle");
+const tradeSlotCtaEl = document.querySelector("#tradeSlotCta");
 const wordRevealEl = document.querySelector("#wordReveal");
 const wordRevealTextEl = document.querySelector("#wordRevealText");
 const wordModal = document.querySelector("#wordModal");
@@ -22117,6 +22156,7 @@ document.addEventListener("visibilitychange", () => {
     saveCompetitiveProgress();
     saveNormalProgress();
     saveChallengeProgress();
+    flushTradeEvents().catch(() => {});
   } else {
     syncWeekendWitchAvatarState();
     updateChallengeQuota();
@@ -22141,14 +22181,349 @@ setInterval(() => {
   updateStatusProfile();
 }, 60000);
 
-function updateStatusAdvertisement() {
-  // Reklama je vidljiva prvih pet minuta svakog punog pola sata.
-  const minute = new Date().getMinutes();
-  document.body.dataset.statusAd = minute % 30 < 5 ? "true" : "false";
+/* G-Lab Trade: house promo slot shared by the G-Lab app portfolio. */
+
+let tradeCampaignList = normalizeTradeCampaigns(TRADE_CAMPAIGNS);
+let tradePreviewId = "";
+let tradeRemoteOff = false;
+let tradeFlushBusy = false;
+
+function tradeCampaignsTable() {
+  return SUPABASE_CONFIG.tradeCampaignsTable || "trade_campaigns";
 }
 
-updateStatusAdvertisement();
-setInterval(updateStatusAdvertisement, 30000);
+function tradeEventsTable() {
+  return SUPABASE_CONFIG.tradeEventsTable || "trade_events";
+}
+
+function normalizeTradeCampaign(row) {
+  const id = String(row?.campaign_id || row?.id || "").trim().toLowerCase();
+  const href = String(row?.href || "").trim();
+  if (!id || !/^https?:\/\//i.test(href)) return null;
+  const title = String(row?.title || "").trim();
+  const image = String(row?.image || "").trim();
+  if (!title && !image) return null;
+  const numbers = (value) => (Array.isArray(value) ? value.map(Number).filter(Number.isInteger) : []);
+  return {
+    id,
+    title,
+    subtitle: String(row?.subtitle || "").trim(),
+    cta: String(row?.cta || "").trim() || "Open",
+    href,
+    label: String(row?.label || "").trim() || (title ? `Open ${title}` : "Open partner app"),
+    image,
+    alt: String(row?.alt || "").trim() || title,
+    weight: Math.max(1, Math.round(Number(row?.weight) || 1)),
+    dailyCap: Math.max(0, Math.round(Number(row?.daily_cap ?? row?.dailyCap) || 0)),
+    start: String(row?.starts_on || row?.start || "").trim(),
+    end: String(row?.ends_on || row?.end || "").trim(),
+    days: numbers(row?.days).filter((day) => day >= 0 && day <= 6),
+    hours: numbers(row?.hours).filter((hour) => hour >= 0 && hour <= 23),
+    enabled: row?.active !== false && row?.enabled !== false
+  };
+}
+
+function normalizeTradeCampaigns(rows = []) {
+  const byId = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const campaign = normalizeTradeCampaign(row);
+    if (campaign && !byId.has(campaign.id)) byId.set(campaign.id, campaign);
+  });
+  return [...byId.values()];
+}
+
+function tradeCycleId(now = new Date()) {
+  const dayIndex = Math.floor((now.getTime() - now.getTimezoneOffset() * 60000) / 86400000);
+  const slot = Math.floor((now.getHours() * 60 + now.getMinutes()) / TRADE_CYCLE_MINUTES);
+  return dayIndex * Math.ceil(1440 / TRADE_CYCLE_MINUTES) + slot;
+}
+
+function tradeSlotOpen(now = new Date()) {
+  return now.getMinutes() % TRADE_CYCLE_MINUTES < TRADE_VISIBLE_MINUTES;
+}
+
+function tradeCampaignScheduled(campaign, now = new Date()) {
+  if (!campaign?.enabled) return false;
+  const today = todayId();
+  if (campaign.start && today < campaign.start) return false;
+  if (campaign.end && today > campaign.end) return false;
+  if (campaign.days.length && !campaign.days.includes(now.getDay())) return false;
+  if (campaign.hours.length && !campaign.hours.includes(now.getHours())) return false;
+  return true;
+}
+
+function loadTradeStats() {
+  try {
+    const data = JSON.parse(localStorage.getItem(TRADE_STATS_KEY) || "null");
+    if (data?.day === todayId() && data.campaigns) return data;
+  } catch {}
+  return { day: todayId(), campaigns: {} };
+}
+
+function tradeCampaignStat(stats, id) {
+  const entry = stats.campaigns[id];
+  return {
+    views: Math.max(0, Number(entry?.views) || 0),
+    clicks: Math.max(0, Number(entry?.clicks) || 0)
+  };
+}
+
+function countTradeEvent(campaign, type) {
+  const stats = loadTradeStats();
+  const entry = tradeCampaignStat(stats, campaign.id);
+  if (type === "click") entry.clicks += 1;
+  else entry.views += 1;
+  stats.campaigns[campaign.id] = entry;
+  try {
+    localStorage.setItem(TRADE_STATS_KEY, JSON.stringify(stats));
+  } catch {}
+  queueTradeEvent(campaign, type);
+}
+
+function eligibleTradeCampaigns(now = new Date()) {
+  const stats = loadTradeStats();
+  return tradeCampaignList.filter((campaign) => {
+    if (!tradeCampaignScheduled(campaign, now)) return false;
+    if (!campaign.dailyCap) return true;
+    return tradeCampaignStat(stats, campaign.id).views < campaign.dailyCap;
+  });
+}
+
+function loadTradeDeck() {
+  try {
+    const deck = JSON.parse(localStorage.getItem(TRADE_DECK_KEY) || "[]");
+    return Array.isArray(deck) ? deck.filter((id) => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTradeDeck(deck) {
+  try {
+    localStorage.setItem(TRADE_DECK_KEY, JSON.stringify(deck));
+  } catch {}
+}
+
+function shuffledTradeDeck(pool) {
+  const deck = [];
+  pool.forEach((campaign) => {
+    for (let copy = 0; copy < campaign.weight; copy += 1) deck.push(campaign.id);
+  });
+  for (let index = deck.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [deck[index], deck[swap]] = [deck[swap], deck[index]];
+  }
+  return deck;
+}
+
+function pickTradeCampaign(pool, lastId) {
+  if (!pool.length) return null;
+  const ids = new Set(pool.map((campaign) => campaign.id));
+  let deck = loadTradeDeck().filter((id) => ids.has(id));
+  // A deck holds one card per weight point, so weights stay exact over a full pass.
+  if (!deck.length) deck = shuffledTradeDeck(pool);
+  const alternative = deck.findIndex((id) => id !== lastId);
+  if (deck[0] === lastId && alternative > 0) {
+    [deck[0], deck[alternative]] = [deck[alternative], deck[0]];
+  }
+  const drawn = deck.shift();
+  saveTradeDeck(deck);
+  return pool.find((campaign) => campaign.id === drawn) || null;
+}
+
+function loadTradeRotation() {
+  try {
+    return JSON.parse(localStorage.getItem(TRADE_ROTATION_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function saveTradeRotation(rotation) {
+  try {
+    localStorage.setItem(TRADE_ROTATION_KEY, JSON.stringify(rotation));
+  } catch {}
+}
+
+function tradeCampaignForCycle(cycle, now = new Date()) {
+  const rotation = loadTradeRotation();
+  if (rotation?.cycle === cycle) {
+    // Every tab and every reload inside one cycle keeps the campaign already drawn.
+    const held = tradeCampaignList.find((campaign) => campaign.id === rotation.id);
+    if (held && tradeCampaignScheduled(held, now)) return held;
+  }
+  const chosen = pickTradeCampaign(eligibleTradeCampaigns(now), rotation?.id);
+  if (chosen) saveTradeRotation({ cycle, id: chosen.id, viewed: false });
+  return chosen;
+}
+
+function markTradeView(cycle, campaign) {
+  const rotation = loadTradeRotation();
+  if (rotation?.cycle === cycle && rotation.id === campaign.id && rotation.viewed) return;
+  saveTradeRotation({ cycle, id: campaign.id, viewed: true });
+  countTradeEvent(campaign, "view");
+}
+
+function renderTradeCampaign(campaign) {
+  if (!tradeSlotEl) return;
+  const useImage = Boolean(campaign.image);
+  tradeSlotEl.href = campaign.href;
+  tradeSlotEl.setAttribute("aria-label", campaign.label);
+  tradeSlotEl.dataset.tradeId = campaign.id;
+  if (tradeSlotImageEl) {
+    if (useImage && tradeSlotImageEl.getAttribute("src") !== campaign.image) {
+      tradeSlotImageEl.src = campaign.image;
+    }
+    tradeSlotImageEl.alt = useImage ? campaign.alt : "";
+    tradeSlotImageEl.hidden = !useImage;
+  }
+  if (tradeSlotCardEl) tradeSlotCardEl.hidden = useImage;
+  if (tradeSlotTitleEl) tradeSlotTitleEl.textContent = campaign.title;
+  if (tradeSlotSubtitleEl) tradeSlotSubtitleEl.textContent = campaign.subtitle;
+  if (tradeSlotCtaEl) tradeSlotCtaEl.textContent = campaign.cta;
+}
+
+function updateStatusAdvertisement() {
+  // Reklama je vidljiva prvih pet minuta svakog punog pola sata.
+  const now = new Date();
+  const preview = tradePreviewId
+    ? tradeCampaignList.find((campaign) => campaign.id === tradePreviewId)
+    : null;
+  const cycle = tradeCycleId(now);
+  const campaign = preview || (tradeSlotOpen(now) ? tradeCampaignForCycle(cycle, now) : null);
+  if (!campaign) {
+    document.body.dataset.statusAd = "false";
+    return;
+  }
+  renderTradeCampaign(campaign);
+  document.body.dataset.statusAd = "true";
+  if (!preview) markTradeView(cycle, campaign);
+}
+
+function handleTradeClick() {
+  const campaign = tradeCampaignList.find((entry) => entry.id === tradeSlotEl?.dataset.tradeId);
+  if (!campaign) return;
+  countTradeEvent(campaign, "click");
+  flushTradeEvents().catch(() => {});
+}
+
+function loadTradeEventQueue() {
+  try {
+    const queue = JSON.parse(localStorage.getItem(TRADE_EVENT_QUEUE_KEY) || "[]");
+    return Array.isArray(queue) ? queue : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTradeEventQueue(queue) {
+  try {
+    localStorage.setItem(TRADE_EVENT_QUEUE_KEY, JSON.stringify(queue.slice(-TRADE_EVENT_QUEUE_LIMIT)));
+  } catch {}
+}
+
+function queueTradeEvent(campaign, type) {
+  if (tradeRemoteOff || !supabaseConfigured()) return;
+  const queue = loadTradeEventQueue();
+  queue.push({
+    campaign_id: campaign.id,
+    event: type,
+    day: todayId(),
+    device_id: profileDeviceId(),
+    nickname: loadPlayerName() || null
+  });
+  saveTradeEventQueue(queue);
+}
+
+async function flushTradeEvents() {
+  if (tradeRemoteOff || tradeFlushBusy || !supabaseConfigured()) return false;
+  const queue = loadTradeEventQueue();
+  if (!queue.length) return false;
+  tradeFlushBusy = true;
+  try {
+    const response = await fetch(supabaseUrl(tradeEventsTable()), {
+      method: "POST",
+      headers: supabaseHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify(queue)
+    });
+    if (response.status === 400 || response.status === 404) {
+      // The trade tables are optional; stop retrying when the project does not have them.
+      tradeRemoteOff = true;
+      saveTradeEventQueue([]);
+      return false;
+    }
+    if (!response.ok) return false;
+    saveTradeEventQueue(loadTradeEventQueue().slice(queue.length));
+    return true;
+  } finally {
+    tradeFlushBusy = false;
+  }
+}
+
+function applyTradeCampaigns(rows = [], cache = false) {
+  const normalized = normalizeTradeCampaigns(rows);
+  if (!normalized.length) return false;
+  tradeCampaignList = normalized;
+  if (cache) {
+    try {
+      localStorage.setItem(TRADE_CAMPAIGNS_KEY, JSON.stringify({
+        savedAt: new Date().toISOString(),
+        rows: normalized
+      }));
+    } catch {}
+  }
+  return true;
+}
+
+function loadCachedTradeCampaigns() {
+  try {
+    const data = JSON.parse(localStorage.getItem(TRADE_CAMPAIGNS_KEY) || "null");
+    return applyTradeCampaigns(data?.rows || [], false);
+  } catch {
+    return false;
+  }
+}
+
+async function fetchTradeCampaigns() {
+  if (tradeRemoteOff || !supabaseConfigured()) return false;
+  const query = [
+    "select=campaign_id,title,subtitle,cta,href,label,image,alt,weight,daily_cap,starts_on,ends_on,days,hours,active",
+    "active=eq.true",
+    "order=weight.desc",
+    "limit=50"
+  ].join("&");
+  const response = await fetch(supabaseUrl(`${tradeCampaignsTable()}?${query}`), {
+    headers: supabaseHeaders()
+  });
+  if (!response.ok) return false;
+  return applyTradeCampaigns(await response.json(), true);
+}
+
+function initTradeModule() {
+  loadCachedTradeCampaigns();
+  if (tradeSlotEl) tradeSlotEl.addEventListener("click", handleTradeClick);
+  updateStatusAdvertisement();
+  setInterval(updateStatusAdvertisement, TRADE_TICK_MS);
+  flushTradeEvents().catch(() => {});
+  fetchTradeCampaigns()
+    .then((changed) => {
+      if (changed) updateStatusAdvertisement();
+    })
+    .catch(() => {});
+}
+
+window.glabTrade = {
+  campaigns: () => tradeCampaignList.map((campaign) => ({ ...campaign })),
+  stats: () => loadTradeStats(),
+  refresh: () => fetchTradeCampaigns(),
+  preview: (id = "") => {
+    tradePreviewId = String(id || "").trim().toLowerCase();
+    updateStatusAdvertisement();
+    return tradePreviewId || "off";
+  }
+};
+
+initTradeModule();
 
 async function bootPetkoApp() {
   await loadOnlineWords().catch(() => {});

@@ -621,6 +621,51 @@ body[data-word-modal-open="true"] .petko-mood span {
   object-position: center;
 }
 
+.status-ad-image[hidden],
+.status-ad-card[hidden] {
+  display: none;
+}
+
+.status-ad-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  padding: 7px 11px;
+  background: linear-gradient(120deg, #050914 0%, #101c34 62%, #050914 100%);
+}
+
+.status-ad-title {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.28);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-ad-subtitle {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-ad-cta {
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
 body[data-status-ad="true"] .status-brand {
   grid-template-columns: minmax(0, 1fr);
   padding: 6px 7px;
