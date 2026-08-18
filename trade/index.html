@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="G-Lab Trade">
+    <title>G-Lab Trade</title>
+    <link rel="manifest" href="manifest.webmanifest?v=1">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="stylesheet" href="styles.css?v=1">
+  </head>
+  <body>
+    <div class="trade-splash" id="tradeSplash" role="dialog" aria-label="G-Lab Trade" aria-modal="true">
+      <div class="trade-splash-card">
+        <div class="splash-logo" aria-hidden="true">
+          <svg viewBox="0 0 120 72" class="splash-chart">
+            <polyline points="4,60 22,44 38,52 56,28 74,36 92,14 116,22" fill="none" stroke="url(#splashLine)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+            <defs>
+              <linearGradient id="splashLine" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#38bdf8"></stop>
+                <stop offset="1" stop-color="#16e68a"></stop>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <h1 class="splash-title">G-Lab <span>Trade</span></h1>
+        <p class="splash-tagline">Paper trading simulator. Virtual money, live-feel markets, zero risk.</p>
+        <button id="tradeSplashButton" type="button">Start trading</button>
+      </div>
+    </div>
+
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="left-actions">
+          <button class="help-top-button" id="helpButton" type="button" aria-label="Rules">Rules</button>
+        </div>
+        <div class="brand">
+          <span class="brand-word">G-Lab <b>Trade</b></span>
+        </div>
+        <div class="top-actions">
+          <div class="equity-pill" id="equityPill" aria-label="Total equity">$0</div>
+        </div>
+      </header>
+
+      <section class="status-panel" aria-live="polite">
+        <div class="status-copy">
+          <span class="eyebrow" id="statusEyebrow">Market open 24/7</span>
+          <p id="message">Buy low, sell high. Prices move even while you are away.</p>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-cell">
+            <small>Equity</small>
+            <strong id="summaryEquity">$0.00</strong>
+          </div>
+          <div class="summary-cell">
+            <small>Cash</small>
+            <strong id="summaryCash">$0.00</strong>
+          </div>
+          <div class="summary-cell">
+            <small>Total P&amp;L</small>
+            <strong id="summaryPnl">$0.00</strong>
+          </div>
+          <div class="summary-cell">
+            <small>Return</small>
+            <strong id="summaryReturn">0.00%</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-row" aria-label="Sections">
+        <button class="tab-button active" type="button" data-tab="market">Market</button>
+        <button class="tab-button" type="button" data-tab="portfolio">Portfolio</button>
+        <button class="tab-button" type="button" data-tab="history">Trades</button>
+      </section>
+
+      <section class="market-panel" id="marketPanel" aria-label="Market">
+        <div class="asset-list" id="assetList"></div>
+      </section>
+
+      <section class="asset-panel" id="assetPanel" hidden aria-label="Asset detail">
+        <div class="asset-head">
+          <button class="back-button" id="assetBackButton" type="button" aria-label="Back to market">‹ Market</button>
+          <div class="asset-title">
+            <strong id="assetName">Asset</strong>
+            <small id="assetSymbol">SYM</small>
+          </div>
+          <div class="asset-price-box">
+            <strong id="assetPrice">$0.00</strong>
+            <small id="assetChange">0.00%</small>
+          </div>
+        </div>
+        <div class="chart-box">
+          <canvas id="assetChart" aria-label="Price chart"></canvas>
+        </div>
+        <div class="timeframe-row" id="timeframeRow" aria-label="Timeframe">
+          <button class="tf-button" type="button" data-tf="1H">1H</button>
+          <button class="tf-button active" type="button" data-tf="1D">1D</button>
+          <button class="tf-button" type="button" data-tf="1W">1W</button>
+          <button class="tf-button" type="button" data-tf="1M">1M</button>
+          <button class="tf-button" type="button" data-tf="1Y">1Y</button>
+        </div>
+        <div class="position-strip" id="positionStrip" hidden>
+          <div><small>You hold</small><strong id="positionQty">0</strong></div>
+          <div><small>Value</small><strong id="positionValue">$0.00</strong></div>
+          <div><small>Avg cost</small><strong id="positionAvg">$0.00</strong></div>
+          <div><small>P&amp;L</small><strong id="positionPnl">$0.00</strong></div>
+        </div>
+        <div class="trade-box">
+          <div class="side-row" role="tablist" aria-label="Order side">
+            <button class="side-button buy active" id="sideBuyButton" type="button">Buy</button>
+            <button class="side-button sell" id="sideSellButton" type="button">Sell</button>
+          </div>
+          <div class="amount-row">
+            <input id="amountInput" type="number" inputmode="decimal" min="0" step="any" placeholder="Amount in $" aria-label="Order amount in dollars">
+            <div class="quick-row">
+              <button class="quick-button" type="button" data-part="0.25">25%</button>
+              <button class="quick-button" type="button" data-part="0.5">50%</button>
+              <button class="quick-button" type="button" data-part="1">Max</button>
+            </div>
+          </div>
+          <div class="order-preview" id="orderPreview">Enter an amount to preview the order.</div>
+          <button class="confirm-button buy" id="confirmButton" type="button" disabled>Buy</button>
+        </div>
+      </section>
+
+      <section class="portfolio-panel" id="portfolioPanel" hidden aria-label="Portfolio">
+        <div class="panel-head">
+          <span>Your positions</span>
+          <button class="reset-button" id="resetButton" type="button">Reset account</button>
+        </div>
+        <div class="position-list" id="positionList"></div>
+      </section>
+
+      <section class="history-panel" id="historyPanel" hidden aria-label="Trade history">
+        <div class="panel-head">
+          <span>Trade history</span>
+          <small id="historyMeta">latest first</small>
+        </div>
+        <ol class="history-list" id="historyList"></ol>
+      </section>
+
+      <section class="status-brand" aria-label="G-Lab">
+        <div class="status-signature">
+          <span class="signature-main">G-Lab Team</span>
+          <span class="signature-main signature-gap">IT Research &amp; Development</span>
+          <small>Concept, design and realization by our team.</small>
+          <small>© 2026 G-Lab - Dragan Milošević</small>
+          <small>All rights reserved.</small>
+        </div>
+      </section>
+    </main>
+
+    <div class="help-modal" id="helpModal" hidden>
+      <article class="help-card" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+        <button class="help-close" id="helpCloseButton" type="button" aria-label="Close">×</button>
+        <h2 id="helpTitle">How G-Lab Trade works</h2>
+        <details class="help-section" open>
+          <summary>The game</summary>
+          <ul>
+            <li>You start with $10,000 of virtual cash.</li>
+            <li>Buy and sell simulated assets to grow your equity.</li>
+            <li>Prices are simulated and keep moving even while the app is closed.</li>
+            <li>The same market plays out on every device, so you can compare runs with friends.</li>
+          </ul>
+        </details>
+        <details class="help-section">
+          <summary>Trading</summary>
+          <ul>
+            <li>Tap an asset to open its chart and order panel.</li>
+            <li>Orders are placed in dollars; quantity is computed at the current price.</li>
+            <li>Fractional quantities are allowed, like real crypto exchanges.</li>
+            <li>Every trade pays a 0.1% commission, so overtrading costs you.</li>
+            <li>Use 25% / 50% / Max to size orders from your cash or holdings.</li>
+          </ul>
+        </details>
+        <details class="help-section">
+          <summary>Assets</summary>
+          <ul>
+            <li>Stocks are calmer; crypto is wilder; DOGZ is pure chaos.</li>
+            <li>AURM (gold) barely moves - a place to park cash.</li>
+            <li>Every asset has its own personality: trend, volatility and rhythm.</li>
+          </ul>
+        </details>
+        <details class="help-section">
+          <summary>Scoring</summary>
+          <ul>
+            <li>Total P&amp;L compares your equity with the $10,000 start.</li>
+            <li>Reset account starts a fresh run from $10,000.</li>
+            <li>Your history keeps the last 100 trades.</li>
+          </ul>
+        </details>
+        <details class="help-section">
+          <summary>Fair warning</summary>
+          <ul>
+            <li>This is a game with fictional assets and virtual money.</li>
+            <li>Nothing here is financial advice, and no real money is involved.</li>
+          </ul>
+        </details>
+      </article>
+    </div>
+
+    <div class="confirm-modal" id="confirmModal" hidden>
+      <article class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <h2 id="confirmTitle">Reset account?</h2>
+        <p>This clears your positions and history and restarts from $10,000. The market itself keeps running.</p>
+        <div class="confirm-actions">
+          <button class="confirm-cancel" id="confirmCancelButton" type="button">Keep playing</button>
+          <button class="confirm-reset" id="confirmResetButton" type="button">Reset</button>
+        </div>
+      </article>
+    </div>
+
+    <div class="toast" id="toast" hidden aria-live="polite"></div>
+
+    <script src="app.js?v=1"></script>
+  </body>
+</html>

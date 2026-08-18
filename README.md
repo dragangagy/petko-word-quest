@@ -60,6 +60,15 @@ npm run cap:sync       # sync into android/ and ios/
 - **Play AAB / iOS archive steps, icons, signing:** see [STORE.md](STORE.md)
 - iOS Archive requires macOS + Xcode; this Windows machine can generate the project and sync Android.
 
+## G-Lab Trade
+
+`trade/` contains **G-Lab Trade**, a standalone paper-trading simulator PWA under the same G-Lab brand.
+
+- Fully static: `trade/index.html`, `trade/styles.css`, `trade/app.js`, plus its own manifest and service worker.
+- Published together with this site, it is available at `/trade/` on GitHub Pages.
+- Prices are simulated deterministically from wall-clock time, so the market keeps moving while the app is closed and every device sees the same market. No backend needed.
+- Virtual money only ($10,000 start, 0.1% fee per trade). Local storage keys use the `glt-` prefix.
+
 ## Notes
 
 - Word length is 5 letters (A–Z).
