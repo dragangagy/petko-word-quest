@@ -19179,7 +19179,7 @@ function tradeCard(row) {
   head.className = "trade-card-head";
   const title = document.createElement("div");
   title.className = "trade-card-title";
-  title.append(challengeNameWithAvatar(tradeOtherName(row)));
+  title.append(challengeAvatarElement(tradeOtherName(row)));
   const headline = document.createElement("span");
   headline.className = "trade-card-headline";
   headline.textContent = tradeHeadline(row);

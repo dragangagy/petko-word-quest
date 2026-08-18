@@ -1632,17 +1632,25 @@ body[data-game-type="hall"] .listing-panel {
   display: none;
 }
 
+/* Badges sit over the top of the button, so a badged label is pushed to the
+   bottom half where nothing covers it. */
+.type-button[data-sent-count],
+.type-button[data-received-count] {
+  align-items: end;
+  padding-bottom: 3px;
+}
+
 .type-button[data-sent-count]::before,
 .type-button[data-received-count]::after {
   position: absolute;
-  min-width: 17px;
-  height: 17px;
+  min-width: 15px;
+  height: 15px;
   display: grid;
   place-items: center;
   border-radius: 999px;
   background: var(--gold);
   color: #09111f;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 950;
   box-shadow: 0 0 12px rgba(255, 215, 0, 0.45);
 }
@@ -1650,7 +1658,7 @@ body[data-game-type="hall"] .listing-panel {
 .type-button[data-sent-count]::before {
   content: attr(data-sent-count);
   top: 3px;
-  right: 21px;
+  right: 19px;
 }
 
 .type-button[data-received-count]::after {
