@@ -22459,8 +22459,7 @@ function updateStatusAdvertisement() {
   const slotKey = currentTradeSlotKey(now);
   const needsFreshPick = !activeTradeCampaign ||
     tradeActiveSlotKey !== slotKey ||
-    !tradeCampaignInSchedule(activeTradeCampaign, now) ||
-    tradePreviewForced();
+    !tradeCampaignInSchedule(activeTradeCampaign, now);
   if (needsFreshPick) {
     renderTradeCampaign(pickTradeCampaign(now));
     tradeActiveSlotKey = slotKey;
