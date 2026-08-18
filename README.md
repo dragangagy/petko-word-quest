@@ -66,3 +66,12 @@ npm run cap:sync       # sync into android/ and ios/
 - Keyboard is QWERTY.
 - Local storage keys use the `pwq-` prefix so they do not collide with Serbian Petko on the same device.
 - This is not financial advice or a gambling product; it is a word puzzle game.
+
+## G-Lab Trade module
+
+Studio cross-promo rotator for the top status panel (not an in-game marketplace).
+
+- Local defaults live in `DEFAULT_TRADE_CAMPAIGNS` inside `app.js`.
+- Slot timing: first 5 minutes of every half hour (`?trade=1` forces the slot open for QA).
+- Optional remote config: run `sql/glab-trade-module.sql`, then campaigns load from `trade_campaigns` with local cache fallback.
+- Impressions/clicks are counted locally; queued events flush to `trade_events` when Supabase is configured.

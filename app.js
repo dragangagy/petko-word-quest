@@ -14921,6 +14921,10 @@ const WEEKEND_WITCH_KEY = "pwq-weekend-witch-v1";
 const WEEKEND_WITCH_PREVIOUS_AVATAR_KEY = "pwq-weekend-witch-previous-avatar-v1";
 const WEEKEND_WITCH_PROMPT_KEY = "pwq-weekend-witch-prompt-v1";
 const WEEKEND_WITCH_CHALLENGE_BONUS_KEY = "pwq-weekend-witch-challenge-bonus-v1";
+const TRADE_STATS_KEY = "pwq-glab-trade-stats-v1";
+const TRADE_CAMPAIGNS_CACHE_KEY = "pwq-glab-trade-campaigns-v1";
+const TRADE_LAST_ID_KEY = "pwq-glab-trade-last-v1";
+const TRADE_EVENTS_QUEUE_KEY = "pwq-glab-trade-events-v1";
 const WEEKEND_WITCH_CHALLENGE_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const WEEKEND_WITCH_AVATAR_IDS = ["female-41", "female-42", "female-43", "female-44", "female-45"];
 const USED_WORDS_KEY = "pwq-used-words-v2";
@@ -15081,7 +15085,54 @@ const SUPABASE_CONFIG = {
   weekendResultsTable: "weekend_results",
   normalStatsTable: "normal_stats",
   playersTable: "players",
-  wordsTable: "words"
+  wordsTable: "words",
+  tradeCampaignsTable: "trade_campaigns",
+  tradeEventsTable: "trade_events"
+};
+
+const DEFAULT_TRADE_CAMPAIGNS = [
+  {
+    id: "numerology",
+    name: "Numerology App",
+    tagline: "Numerology, Astrology and Tarot",
+    href: "https://dragangagy.github.io/numerology-app/",
+    image: "ad-numerology.png",
+    alt: "Numerology, Astrology and Tarot app",
+    weight: 3,
+    dailyCap: 48,
+    style: "image",
+    active: true
+  },
+  {
+    id: "petko-sr",
+    name: "Petko",
+    tagline: "Srpska 5-slovna igra reči by G-Lab",
+    href: "https://dragangagy.github.io/petko/",
+    image: "",
+    alt: "Petko",
+    weight: 2,
+    dailyCap: 32,
+    style: "card",
+    active: true
+  },
+  {
+    id: "glab-house",
+    name: "G-Lab Team",
+    tagline: "IT Research & Development",
+    href: "",
+    image: "glab-logo-neon.png",
+    alt: "G-Lab Team",
+    weight: 1,
+    dailyCap: 16,
+    style: "image",
+    active: true
+  }
+];
+
+const TRADE_SLOT = {
+  // Visible for the first N minutes of every half-hour block.
+  windowMinutes: 5,
+  blockMinutes: 30
 };
 
 const boardsEl = document.querySelector("#boards");
@@ -15111,6 +15162,11 @@ const helpModal = document.querySelector("#helpModal");
 const helpCloseButton = document.querySelector("#helpCloseButton");
 const normalStatsEl = document.querySelector("#normalStats");
 const statusLogoEl = document.querySelector(".status-logo");
+const statusAdEl = document.querySelector("#statusAd");
+const statusAdImageEl = document.querySelector("#statusAdImage");
+const statusAdCardEl = document.querySelector("#statusAdCard");
+const statusAdTitleEl = document.querySelector("#statusAdTitle");
+const statusAdTaglineEl = document.querySelector("#statusAdTagline");
 const wordRevealEl = document.querySelector("#wordReveal");
 const wordRevealTextEl = document.querySelector("#wordRevealText");
 const wordModal = document.querySelector("#wordModal");
@@ -17899,7 +17955,7 @@ function renderWeekendWitchScoreboard(rows = []) {
     weekendWitchScoreboardEl.innerHTML = "";
     if (weekendWitchWinnerEl) weekendWitchWinnerEl.hidden = true;
     if (idleWitchWeekendPosterEl) {
-      idleWitchWeekendPosterEl.src = "witch-weekend-poster.png?v=6";
+      idleWitchWeekendPosterEl.src = "witch-weekend-poster.png?v=7";
       idleWitchWeekendPosterEl.alt = "";
     }
     return;
@@ -17932,7 +17988,7 @@ function renderWeekendWitchScoreboard(rows = []) {
   if (idleWitchWeekendPosterEl) {
     idleWitchWeekendPosterEl.src = showFinalWinner
       ? witchHuntWinnerImage(winningFaction, displayWindow)
-      : "witch-weekend-poster.png?v=6";
+      : "witch-weekend-poster.png?v=7";
     idleWitchWeekendPosterEl.alt = showFinalWinner ? "Witch Hunt winners" : "";
   }
   if (weekendWitchWinnerEl) {
@@ -22141,17 +22197,343 @@ setInterval(() => {
   updateStatusProfile();
 }, 60000);
 
+function tradeCampaignsTable() {
+  return SUPABASE_CONFIG.tradeCampaignsTable || "trade_campaigns";
+}
+
+function tradeEventsTable() {
+  return SUPABASE_CONFIG.tradeEventsTable || "trade_events";
+}
+
+function tradePreviewForced() {
+  const value = new URLSearchParams(window.location.search).get("trade");
+  return value === "1" || value === "true" || value === "preview";
+}
+
+function normalizeTradeCampaign(row = {}) {
+  const id = String(row.id || row.campaign_id || "").trim();
+  if (!id) return null;
+  const weight = Math.max(0, Number(row.weight) || 0);
+  const dailyCap = Math.max(0, Number(row.dailyCap ?? row.daily_cap) || 0);
+  const style = String(row.style || "").trim() || (row.image ? "image" : "card");
+  const active = row.active !== false && row.active !== "false" && row.active !== 0;
+  return {
+    id,
+    name: String(row.name || id).trim(),
+    tagline: String(row.tagline || "").trim(),
+    href: String(row.href || row.url || "").trim(),
+    image: String(row.image || row.image_url || "").trim(),
+    alt: String(row.alt || row.name || id).trim(),
+    weight,
+    dailyCap,
+    style: style === "text" ? "card" : style,
+    active,
+    startsAt: row.startsAt || row.starts_at || null,
+    endsAt: row.endsAt || row.ends_at || null
+  };
+}
+
+function loadTradeCampaignCache() {
+  try {
+    const data = JSON.parse(localStorage.getItem(TRADE_CAMPAIGNS_CACHE_KEY) || "null");
+    const rows = Array.isArray(data?.rows) ? data.rows.map(normalizeTradeCampaign).filter(Boolean) : [];
+    return rows.length ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTradeCampaignCache(rows = []) {
+  localStorage.setItem(TRADE_CAMPAIGNS_CACHE_KEY, JSON.stringify({
+    savedAt: new Date().toISOString(),
+    rows
+  }));
+}
+
+let tradeCampaigns = loadTradeCampaignCache() || DEFAULT_TRADE_CAMPAIGNS.map((row) => ({ ...row }));
+let activeTradeCampaign = null;
+let tradeImpressionMarkedFor = null;
+let tradeActiveSlotKey = "";
+
+function currentTradeSlotKey(now = new Date()) {
+  const block = Math.floor((now.getHours() * 60 + now.getMinutes()) / TRADE_SLOT.blockMinutes);
+  return `${todayId()}-${block}`;
+}
+
+function loadTradeStats() {
+  try {
+    const data = JSON.parse(localStorage.getItem(TRADE_STATS_KEY) || "null");
+    if (!data || data.day !== todayId()) {
+      return { day: todayId(), impressions: {}, clicks: {} };
+    }
+    return {
+      day: data.day,
+      impressions: data.impressions && typeof data.impressions === "object" ? data.impressions : {},
+      clicks: data.clicks && typeof data.clicks === "object" ? data.clicks : {}
+    };
+  } catch {
+    return { day: todayId(), impressions: {}, clicks: {} };
+  }
+}
+
+function saveTradeStats(stats) {
+  localStorage.setItem(TRADE_STATS_KEY, JSON.stringify(stats));
+}
+
+function tradeCampaignInSchedule(campaign, now = new Date()) {
+  if (!campaign?.active) return false;
+  if (campaign.startsAt) {
+    const start = new Date(campaign.startsAt);
+    if (!Number.isNaN(start.getTime()) && now < start) return false;
+  }
+  if (campaign.endsAt) {
+    const end = new Date(campaign.endsAt);
+    if (!Number.isNaN(end.getTime()) && now > end) return false;
+  }
+  return true;
+}
+
+function tradeSlotOpen(now = new Date()) {
+  if (tradePreviewForced()) return true;
+  const minute = now.getMinutes();
+  return minute % TRADE_SLOT.blockMinutes < TRADE_SLOT.windowMinutes;
+}
+
+function eligibleTradeCampaigns(now = new Date()) {
+  const stats = loadTradeStats();
+  const lastId = localStorage.getItem(TRADE_LAST_ID_KEY) || "";
+  return tradeCampaigns.filter((campaign) => {
+    if (!tradeCampaignInSchedule(campaign, now)) return false;
+    if ((campaign.weight || 0) <= 0) return false;
+    if (campaign.dailyCap > 0 && Number(stats.impressions[campaign.id] || 0) >= campaign.dailyCap) {
+      return false;
+    }
+    return true;
+  }).sort((left, right) => {
+    // Soft preference: avoid immediate repeat when alternatives exist.
+    if (left.id === lastId && right.id !== lastId) return 1;
+    if (right.id === lastId && left.id !== lastId) return -1;
+    return 0;
+  });
+}
+
+function pickTradeCampaign(now = new Date()) {
+  const pool = eligibleTradeCampaigns(now);
+  if (!pool.length) return null;
+  const totalWeight = pool.reduce((sum, campaign) => sum + (Number(campaign.weight) || 0), 0);
+  if (totalWeight <= 0) return pool[0];
+  let cursor = Math.random() * totalWeight;
+  for (const campaign of pool) {
+    cursor -= Number(campaign.weight) || 0;
+    if (cursor <= 0) return campaign;
+  }
+  return pool[pool.length - 1];
+}
+
+function queueTradeEvent(eventType, campaign) {
+  if (!campaign?.id) return;
+  const entry = {
+    campaign_id: campaign.id,
+    event_type: eventType,
+    created_at: new Date().toISOString(),
+    day: todayId(),
+    device_id: localStorage.getItem(DEVICE_ID_KEY) || ""
+  };
+  try {
+    const queue = JSON.parse(localStorage.getItem(TRADE_EVENTS_QUEUE_KEY) || "[]");
+    const next = Array.isArray(queue) ? queue : [];
+    next.push(entry);
+    localStorage.setItem(TRADE_EVENTS_QUEUE_KEY, JSON.stringify(next.slice(-80)));
+  } catch {
+    localStorage.setItem(TRADE_EVENTS_QUEUE_KEY, JSON.stringify([entry]));
+  }
+}
+
+async function flushTradeEvents() {
+  if (!supabaseConfigured()) return;
+  let queue = [];
+  try {
+    queue = JSON.parse(localStorage.getItem(TRADE_EVENTS_QUEUE_KEY) || "[]");
+  } catch {
+    queue = [];
+  }
+  if (!Array.isArray(queue) || !queue.length) return;
+  const payload = queue.slice(0, 40).map((row) => ({
+    campaign_id: row.campaign_id,
+    event_type: row.event_type,
+    created_at: row.created_at,
+    day: row.day,
+    device_id: row.device_id || null
+  }));
+  try {
+    const response = await fetch(supabaseUrl(tradeEventsTable()), {
+      method: "POST",
+      headers: {
+        ...supabaseHeaders(),
+        "Content-Type": "application/json",
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) return;
+    const remaining = queue.slice(payload.length);
+    localStorage.setItem(TRADE_EVENTS_QUEUE_KEY, JSON.stringify(remaining));
+  } catch {
+    // Keep queue for a later retry.
+  }
+}
+
+function markTradeImpression(campaign) {
+  if (!campaign?.id || tradeImpressionMarkedFor === campaign.id) return;
+  tradeImpressionMarkedFor = campaign.id;
+  const stats = loadTradeStats();
+  stats.impressions[campaign.id] = Number(stats.impressions[campaign.id] || 0) + 1;
+  saveTradeStats(stats);
+  localStorage.setItem(TRADE_LAST_ID_KEY, campaign.id);
+  queueTradeEvent("impression", campaign);
+}
+
+function markTradeClick(campaign) {
+  if (!campaign?.id) return;
+  const stats = loadTradeStats();
+  stats.clicks[campaign.id] = Number(stats.clicks[campaign.id] || 0) + 1;
+  saveTradeStats(stats);
+  queueTradeEvent("click", campaign);
+  flushTradeEvents().catch(() => {});
+}
+
+function renderTradeCampaign(campaign) {
+  if (!statusAdEl) return;
+  activeTradeCampaign = campaign;
+  if (!campaign) {
+    statusAdEl.removeAttribute("data-trade-id");
+    statusAdEl.removeAttribute("data-trade-style");
+    return;
+  }
+  const style = campaign.image && campaign.style !== "card" ? "image" : "card";
+  statusAdEl.dataset.tradeId = campaign.id;
+  statusAdEl.dataset.tradeStyle = style;
+  const hasLink = Boolean(campaign.href);
+  if (hasLink) {
+    statusAdEl.href = campaign.href;
+    statusAdEl.target = "_blank";
+    statusAdEl.rel = "noopener noreferrer";
+    statusAdEl.setAttribute("aria-label", `Open ${campaign.name}`);
+    statusAdEl.setAttribute("aria-disabled", "false");
+  } else {
+    statusAdEl.href = "#";
+    statusAdEl.removeAttribute("target");
+    statusAdEl.removeAttribute("rel");
+    statusAdEl.setAttribute("aria-label", campaign.name);
+    statusAdEl.setAttribute("aria-disabled", "true");
+  }
+  if (statusAdImageEl) {
+    if (campaign.image) {
+      statusAdImageEl.hidden = style !== "image";
+      statusAdImageEl.src = campaign.image;
+      statusAdImageEl.alt = campaign.alt || campaign.name;
+    } else {
+      statusAdImageEl.hidden = true;
+      statusAdImageEl.removeAttribute("src");
+      statusAdImageEl.alt = "";
+    }
+  }
+  if (statusAdCardEl) {
+    statusAdCardEl.hidden = style === "image";
+  }
+  if (statusAdTitleEl) statusAdTitleEl.textContent = campaign.name || "G-Lab Trade";
+  if (statusAdTaglineEl) {
+    statusAdTaglineEl.textContent = campaign.tagline || "G-Lab cross-promo";
+  }
+}
+
 function updateStatusAdvertisement() {
-  // Reklama je vidljiva prvih pet minuta svakog punog pola sata.
-  const minute = new Date().getMinutes();
-  document.body.dataset.statusAd = minute % 30 < 5 ? "true" : "false";
+  // G-Lab Trade: rotating studio campaigns in the status panel slot.
+  const now = new Date();
+  const open = tradeSlotOpen(now);
+  if (!open) {
+    document.body.dataset.statusAd = "false";
+    tradeImpressionMarkedFor = null;
+    return;
+  }
+  const slotKey = currentTradeSlotKey(now);
+  const needsFreshPick = !activeTradeCampaign ||
+    tradeActiveSlotKey !== slotKey ||
+    !tradeCampaignInSchedule(activeTradeCampaign, now) ||
+    tradePreviewForced();
+  if (needsFreshPick) {
+    renderTradeCampaign(pickTradeCampaign(now));
+    tradeActiveSlotKey = slotKey;
+    tradeImpressionMarkedFor = null;
+  } else {
+    const stats = loadTradeStats();
+    const capped = activeTradeCampaign.dailyCap > 0 &&
+      Number(stats.impressions[activeTradeCampaign.id] || 0) >= activeTradeCampaign.dailyCap;
+    if (capped) {
+      renderTradeCampaign(pickTradeCampaign(now));
+      tradeImpressionMarkedFor = null;
+    } else {
+      renderTradeCampaign(activeTradeCampaign);
+    }
+  }
+  document.body.dataset.statusAd = activeTradeCampaign ? "true" : "false";
+  if (activeTradeCampaign && document.body.dataset.statusAd === "true") {
+    markTradeImpression(activeTradeCampaign);
+  }
+}
+
+async function fetchTradeCampaigns() {
+  if (!supabaseConfigured()) return false;
+  try {
+    const query = [
+      "select=id,name,tagline,href,image,alt,weight,daily_cap,style,active,starts_at,ends_at",
+      "active=eq.true",
+      "order=weight.desc"
+    ].join("&");
+    const response = await fetch(supabaseUrl(`${tradeCampaignsTable()}?${query}`), {
+      headers: supabaseHeaders()
+    });
+    if (!response.ok) return false;
+    const rows = await response.json();
+    const normalized = (Array.isArray(rows) ? rows : []).map(normalizeTradeCampaign).filter(Boolean);
+    if (!normalized.length) return false;
+    tradeCampaigns = normalized;
+    saveTradeCampaignCache(normalized);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function bootGlabTradeModule() {
+  const cached = loadTradeCampaignCache();
+  if (cached?.length) tradeCampaigns = cached;
+  if (statusAdEl && !statusAdEl.dataset.tradeBound) {
+    statusAdEl.dataset.tradeBound = "1";
+    statusAdEl.addEventListener("click", (event) => {
+      if (!activeTradeCampaign) return;
+      if (!activeTradeCampaign.href) {
+        event.preventDefault();
+        return;
+      }
+      markTradeClick(activeTradeCampaign);
+    });
+  }
+  updateStatusAdvertisement();
+  await fetchTradeCampaigns().catch(() => false);
+  updateStatusAdvertisement();
+  flushTradeEvents().catch(() => {});
 }
 
 updateStatusAdvertisement();
 setInterval(updateStatusAdvertisement, 30000);
+setInterval(() => {
+  flushTradeEvents().catch(() => {});
+}, 120000);
 
 async function bootPetkoApp() {
   await loadOnlineWords().catch(() => {});
+  bootGlabTradeModule().catch(() => {});
   syncWeekendWitchAvatarState();
   weekendWitchChallengeBonus();
   refreshManualChallengeCredit().catch(() => {});

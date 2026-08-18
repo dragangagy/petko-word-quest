@@ -611,6 +611,13 @@ body[data-word-modal-open="true"] .petko-mood span {
   border-radius: 10px;
   background: #050914;
   box-shadow: 0 0 12px rgba(255, 215, 0, 0.2);
+  text-decoration: none;
+  color: inherit;
+}
+
+.status-ad[aria-disabled="true"] {
+  pointer-events: none;
+  cursor: default;
 }
 
 .status-ad img {
@@ -619,6 +626,40 @@ body[data-word-modal-open="true"] .petko-mood span {
   display: block;
   object-fit: contain;
   object-position: center;
+}
+
+.status-ad[data-trade-style="card"] img,
+.status-ad[data-trade-style="text"] img {
+  display: none;
+}
+
+.status-ad-card {
+  display: none;
+  height: 100%;
+  padding: 8px 12px;
+  align-content: center;
+  gap: 2px;
+  background:
+    radial-gradient(circle at 12% 30%, rgba(255, 215, 0, 0.18), transparent 42%),
+    linear-gradient(120deg, #07111f 0%, #0b1a33 55%, #071018 100%);
+}
+
+.status-ad[data-trade-style="card"] .status-ad-card,
+.status-ad[data-trade-style="text"] .status-ad-card {
+  display: grid;
+}
+
+.status-ad-card strong {
+  color: #ffe566;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+
+.status-ad-card small {
+  color: rgba(226, 232, 240, 0.88);
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 body[data-status-ad="true"] .status-brand {
