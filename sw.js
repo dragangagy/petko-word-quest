@@ -1,4 +1,4 @@
-const CACHE_NAME = "pwq-cache-v6";
+const CACHE_NAME = "pwq-cache-v7";
 
 const ASSETS = [
   "./",

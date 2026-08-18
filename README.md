@@ -22,7 +22,7 @@ Required files:
 Create a **new** Supabase project for Petko Word Quest. Do not reuse the Serbian Petko project.
 
 1. Run `supabase-schema.sql` in the SQL editor.
-2. Run scheduled SQL helpers under `sql/` as needed.
+2. Run scheduled SQL helpers under `sql/` as needed. For an existing project, `sql/2026-08-18-trades.sql` adds the Trade module on its own.
 3. Seed English words into `public.words` (generate from the `WORDS` list in `app.js`, or load online words after the table is ready).
 4. Set these values in `app.js`:
 
@@ -45,6 +45,18 @@ Open `index.html` in a browser, or serve the folder with any static server.
 # optional local server example
 npx --yes serve .
 ```
+
+## G-Lab Trade
+
+The **Trade** tab lets players exchange today's challenge slots.
+
+- Your free slots are the allowed daily challenges you have not used yet, so trading spends real capacity instead of minting new value.
+- **Give slots** offers spare challenges to another player; **Ask for slots** requests them. Either way the other player has to accept.
+- An open offer holds the slots aside until it is answered, so the same slot cannot be promised twice and played at the same time.
+- Limits: 6 open trades per player per day, 1-5 challenges per offer.
+- Trades are scoped to the current day. Anything unanswered stops counting after midnight; there is no persistent credit balance to reconcile.
+
+Everything lands in the `trades` table and feeds back into `challengeDailyLimit()`. Because the app talks to Supabase with the anon key, the day scope, the self-trade block and the daily offer cap are enforced by the `trades_validate` trigger as well as by the client.
 
 ## App stores (Capacitor)
 

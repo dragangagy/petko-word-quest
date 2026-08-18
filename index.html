@@ -7,10 +7,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Petko Word Quest">
     <title>Petko Word Quest</title>
-    <link rel="manifest" href="manifest.webmanifest?v=6">
+    <link rel="manifest" href="manifest.webmanifest?v=7">
     <link rel="icon" href="app-icon-store.png" type="image/png">
     <link rel="apple-touch-icon" href="app-icon-store.png">
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=7">
   </head>
   <body>
     <div class="petko-splash" id="petkoSplash" role="dialog" aria-label="Petko Word Quest" aria-modal="true">
@@ -75,6 +75,7 @@
         <button class="type-button active" type="button" data-type="normal">Classic</button>
         <button class="type-button" type="button" data-type="competitive">Competitive</button>
         <button class="type-button" type="button" data-type="challenge">Challenge</button>
+        <button class="type-button" type="button" data-type="trade">Trade</button>
         <button class="type-button" type="button" data-type="hall">Medals</button>
       </section>
 
@@ -100,6 +101,27 @@
           <button id="checkChallengeButton" type="button" hidden>Check</button>
         </div>
         <div class="challenge-history" id="challengeHistory"></div>
+      </section>
+
+      <section class="trade-panel" id="tradePanel" hidden aria-live="polite">
+        <div class="trade-head">
+          <span>G-Lab Trade</span>
+          <small>Today's challenge slots</small>
+        </div>
+        <div class="trade-summary">
+          <div class="trade-summary-item">
+            <span class="trade-summary-label">Free to trade</span>
+            <strong id="tradeFreeSlots">0 free of 1</strong>
+          </div>
+          <div class="trade-summary-item">
+            <span class="trade-summary-label">Traded today</span>
+            <strong id="tradeBalance">Received +0 · Given −0</strong>
+          </div>
+        </div>
+        <div class="trade-copy" id="tradeStatus" hidden></div>
+        <button class="trade-open-button" id="openTradeButton" type="button">New trade</button>
+        <div class="trade-note">Give a spare challenge to a friend, or ask for one. Traded slots count for today only.</div>
+        <div class="trade-history" id="tradeHistory"></div>
       </section>
 
       <section class="hall-panel" id="hallPanel" hidden aria-live="polite">
@@ -139,7 +161,7 @@
         <img class="idle-petko-competitive" src="22.png" alt="">
         <img class="idle-petko-challenge" src="18.png" alt="">
         <div class="weekend-witch-scoreboard" id="weekendWitchScoreboard" hidden></div>
-        <img class="idle-witch-weekend-poster" src="witch-weekend-poster.png?v=6" alt="">
+        <img class="idle-witch-weekend-poster" src="witch-weekend-poster.png?v=7" alt="">
         <div class="weekend-witch-winner" id="weekendWitchWinner" hidden></div>
       </section>
 
@@ -242,6 +264,19 @@
           </ul>
         </details>
         <details class="help-section">
+          <summary>Trade</summary>
+          <ul>
+            <li>Trade moves today's challenge slots between players.</li>
+            <li>Your free slots are the allowed challenges you have not used yet.</li>
+            <li>Give slots sends spare challenges to another player.</li>
+            <li>Ask for slots requests challenges from another player.</li>
+            <li>Every trade waits for the other player to accept or decline.</li>
+            <li>An open offer holds your slots aside until it is answered.</li>
+            <li>You can open 6 trades per day, up to 5 challenges each.</li>
+            <li>Traded slots count for the current day only and expire at midnight.</li>
+          </ul>
+        </details>
+        <details class="help-section">
           <summary>Profile</summary>
           <ul>
             <li>Open your profile by tapping the small avatar window near the top of the game.</li>
@@ -314,6 +349,30 @@
       </article>
     </div>
 
+    <div class="trade-modal" id="tradeModal" hidden>
+      <article class="trade-modal-card" role="dialog" aria-modal="true" aria-labelledby="tradeModalTitle">
+        <button class="challenge-picker-close" id="tradeModalClose" type="button" aria-label="Close">×</button>
+        <h2 id="tradeModalTitle">New trade</h2>
+        <div class="trade-kind-row" role="group" aria-label="Trade direction">
+          <button class="trade-kind-button active" type="button" data-trade-kind="send" aria-pressed="true">Give slots</button>
+          <button class="trade-kind-button" type="button" data-trade-kind="request" aria-pressed="false">Ask for slots</button>
+        </div>
+        <div class="trade-amount-row">
+          <span>Challenges</span>
+          <div class="trade-amount-stepper">
+            <button id="tradeAmountDown" type="button" aria-label="Fewer challenges">−</button>
+            <strong id="tradeAmountValue">1</strong>
+            <button id="tradeAmountUp" type="button" aria-label="More challenges">+</button>
+          </div>
+        </div>
+        <input class="challenge-picker-search" id="tradePickerSearch" type="search" autocomplete="off" placeholder="Search players">
+        <div class="challenge-picker-grid" id="tradePickerGrid"></div>
+        <input class="trade-note-input" id="tradeNoteInput" type="text" maxlength="80" autocomplete="off" placeholder="Short message (optional)">
+        <div class="challenge-picker-message" id="tradeModalMessage" aria-live="polite"></div>
+        <button class="challenge-picker-submit" id="tradeModalSubmit" type="button" disabled>Offer challenges</button>
+      </article>
+    </div>
+
     <div class="hall-modal" id="hallModal" hidden>
       <article class="hall-modal-card" role="dialog" aria-modal="true" aria-labelledby="hallModalTitle">
         <button class="hall-modal-close" id="hallModalClose" type="button" aria-label="Close">×</button>
@@ -325,6 +384,6 @@
       </article>
     </div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
   </body>
 </html>

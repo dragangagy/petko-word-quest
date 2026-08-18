@@ -14927,6 +14927,11 @@ const USED_WORDS_KEY = "pwq-used-words-v2";
 const WORD_DECK_KEY = "pwq-word-deck-v1";
 const ONLINE_WORDS_KEY = "pwq-online-words-v1";
 const NOTIFICATION_SEEN_KEY = "pwq-notification-seen-v1";
+const TRADE_MAX_AMOUNT = 5;
+const TRADE_DAILY_OFFER_LIMIT = 6;
+const TRADE_SYNC_INTERVAL_MS = 7000;
+const TRADE_BALANCE_KEY = "pwq-trade-balance-v1";
+const TRADE_ROWS_KEY = "pwq-trade-rows-v1";
 const BASE_PROFILE_AVATARS = [
   ...Array.from({ length: 19 }, (_, index) => ({
     id: `male-${index + 1}`,
@@ -15081,7 +15086,8 @@ const SUPABASE_CONFIG = {
   weekendResultsTable: "weekend_results",
   normalStatsTable: "normal_stats",
   playersTable: "players",
-  wordsTable: "words"
+  wordsTable: "words",
+  tradesTable: "trades"
 };
 
 const boardsEl = document.querySelector("#boards");
@@ -15165,6 +15171,23 @@ const challengeVsLeftAvatar = document.querySelector("#challengeVsLeftAvatar");
 const challengeVsLeftName = document.querySelector("#challengeVsLeftName");
 const challengeVsRightAvatar = document.querySelector("#challengeVsRightAvatar");
 const challengeVsRightName = document.querySelector("#challengeVsRightName");
+const tradePanelEl = document.querySelector("#tradePanel");
+const tradeStatusEl = document.querySelector("#tradeStatus");
+const tradeBalanceEl = document.querySelector("#tradeBalance");
+const tradeFreeSlotsEl = document.querySelector("#tradeFreeSlots");
+const tradeHistoryEl = document.querySelector("#tradeHistory");
+const openTradeButton = document.querySelector("#openTradeButton");
+const tradeModal = document.querySelector("#tradeModal");
+const tradeModalClose = document.querySelector("#tradeModalClose");
+const tradeKindButtons = [...document.querySelectorAll("[data-trade-kind]")];
+const tradeAmountValue = document.querySelector("#tradeAmountValue");
+const tradeAmountDown = document.querySelector("#tradeAmountDown");
+const tradeAmountUp = document.querySelector("#tradeAmountUp");
+const tradePickerSearch = document.querySelector("#tradePickerSearch");
+const tradePickerGrid = document.querySelector("#tradePickerGrid");
+const tradeNoteInput = document.querySelector("#tradeNoteInput");
+const tradeModalMessage = document.querySelector("#tradeModalMessage");
+const tradeModalSubmit = document.querySelector("#tradeModalSubmit");
 const hallPanelEl = document.querySelector("#hallPanel");
 const hallCarouselEl = document.querySelector("#hallCarousel");
 const hallGridEl = document.querySelector("#hallGrid");
@@ -15224,6 +15247,14 @@ let hallMedalIndex = 0;
 let hallTouchStartX = 0;
 let challengeSyncBusy = false;
 let challengeSyncSnapshot = "";
+let tradeRows = [];
+let tradePickerPlayers = [];
+let tradePickerSelected = "";
+let tradeOfferKind = "send";
+let tradeOfferAmount = 1;
+let tradeBusy = false;
+let tradeSyncBusy = false;
+let tradeSyncSnapshot = "";
 
 function normalize(text) {
   return String(text || "")
@@ -16658,10 +16689,11 @@ function challengeDailyLimit() {
   const normalBonus = loadNormalChallengeBonus().bonus;
   const weekendBonus = weekendWitchChallengeBonus();
   const manualCredit = loadManualChallengeCredit();
-  return Math.min(
+  const tradeBonus = tradeSlotBonus();
+  return Math.max(0, Math.min(
     CHALLENGE_MAX_DAILY_LIMIT,
-    CHALLENGE_BASE_DAILY_LIMIT + levelBonus + normalBonus + weekendBonus + manualCredit
-  );
+    CHALLENGE_BASE_DAILY_LIMIT + levelBonus + normalBonus + weekendBonus + manualCredit + tradeBonus
+  ));
 }
 
 function completedCompetitiveLevelIndex() {
@@ -18933,6 +18965,669 @@ function confirmSurrenderChallenge(row) {
   });
 }
 
+// G-Lab Trade: igraci razmenjuju danasnje challenge slotove. Nema trajnog
+// salda - bonus za danas se uvek izvodi iz prihvacenih redova sa day = danas,
+// pa neprihvacena ponuda posle ponoci jednostavno prestaje da se racuna.
+function tradesTable() {
+  return SUPABASE_CONFIG.tradesTable || "trades";
+}
+
+function tradeCode() {
+  const stamp = Date.now().toString(36).slice(-4).toUpperCase();
+  const random = Math.random().toString(36).replace(/[^a-z0-9]/gi, "").slice(2, 5).toUpperCase();
+  return `T${stamp}${random.padEnd(3, "0")}`;
+}
+
+function tradeDay(row) {
+  return String(row?.day || "").slice(0, 10);
+}
+
+function tradeIsToday(row) {
+  return tradeDay(row) === todayId();
+}
+
+function tradeAmountOf(row) {
+  return Math.max(0, Math.min(TRADE_MAX_AMOUNT, Number(row?.amount) || 0));
+}
+
+function tradeMatchesMe(name, device) {
+  if (device && device === profileDeviceId()) return true;
+  const me = loadPlayerName();
+  return Boolean(me && sameChallengeName(name, me));
+}
+
+function tradeRole(row) {
+  if (tradeMatchesMe(row?.from_nickname, row?.from_device)) return "sender";
+  if (tradeMatchesMe(row?.to_nickname, row?.to_device)) return "receiver";
+  return "";
+}
+
+function tradeInvolvesMe(row) {
+  return Boolean(tradeRole(row));
+}
+
+// Za 'send' slotove daje posiljalac, za 'request' ih daje pozvana strana.
+function tradeIAmGiver(row) {
+  const role = tradeRole(row);
+  if (!role) return false;
+  return row?.kind === "request" ? role === "receiver" : role === "sender";
+}
+
+function tradeCardState(row) {
+  if (row?.status === "accepted") return "accepted";
+  if (row?.status === "declined" || row?.status === "cancelled") return "closed";
+  if (!tradeIsToday(row)) return "closed";
+  return "pending";
+}
+
+function tradeOtherName(row) {
+  const name = tradeRole(row) === "sender" ? row?.to_nickname : row?.from_nickname;
+  return cleanChallengeName(name) || "Player";
+}
+
+function computeTradeBalance(rows = []) {
+  return rows.reduce((totals, row) => {
+    if (!tradeIsToday(row) || !tradeInvolvesMe(row)) return totals;
+    const amount = tradeAmountOf(row);
+    const state = tradeCardState(row);
+    if (state === "accepted") {
+      if (tradeIAmGiver(row)) totals.given += amount;
+      else totals.received += amount;
+      return totals;
+    }
+    // Poslata ponuda drzi slotove rezervisane dok druga strana ne odgovori.
+    if (state === "pending" && row?.kind === "send" && tradeRole(row) === "sender") {
+      totals.reserved += amount;
+    }
+    return totals;
+  }, { received: 0, given: 0, reserved: 0 });
+}
+
+function saveTradeBalance(balance) {
+  try {
+    localStorage.setItem(TRADE_BALANCE_KEY, JSON.stringify({
+      day: todayId(),
+      received: balance.received,
+      given: balance.given,
+      reserved: balance.reserved
+    }));
+  } catch {}
+}
+
+function loadTradeBalance() {
+  try {
+    const data = JSON.parse(localStorage.getItem(TRADE_BALANCE_KEY) || "null");
+    if (!data || data.day !== todayId()) return { received: 0, given: 0, reserved: 0 };
+    return {
+      received: Math.max(0, Number(data.received) || 0),
+      given: Math.max(0, Number(data.given) || 0),
+      reserved: Math.max(0, Number(data.reserved) || 0)
+    };
+  } catch {
+    return { received: 0, given: 0, reserved: 0 };
+  }
+}
+
+function tradeSlotBonus() {
+  const balance = loadTradeBalance();
+  return balance.received - balance.given - balance.reserved;
+}
+
+function saveCachedTradeRows(rows = []) {
+  try {
+    localStorage.setItem(TRADE_ROWS_KEY, JSON.stringify({ day: todayId(), rows: rows.slice(0, 60) }));
+  } catch {}
+}
+
+function loadCachedTradeRows() {
+  try {
+    const data = JSON.parse(localStorage.getItem(TRADE_ROWS_KEY) || "null");
+    if (!data || data.day !== todayId() || !Array.isArray(data.rows)) return [];
+    return data.rows;
+  } catch {
+    return [];
+  }
+}
+
+function tradeFreeSlots() {
+  const used = dailyChallengeCount(loadSentChallengeRowsToday());
+  return Math.max(0, challengeDailyLimit() - used);
+}
+
+function tradeOffersSentToday(rows = tradeRows) {
+  return rows.filter((row) => tradeIsToday(row) && tradeRole(row) === "sender").length;
+}
+
+async function fetchTradeRows() {
+  if (!supabaseConfigured()) return loadCachedTradeRows();
+  const query = [
+    "select=code,day,kind,amount,note,from_nickname,from_device,to_nickname,to_device,status,created_at,updated_at,resolved_at",
+    `day=eq.${encodeURIComponent(todayId())}`,
+    "order=created_at.desc",
+    "limit=300"
+  ].join("&");
+  const response = await fetch(supabaseUrl(`${tradesTable()}?${query}`), {
+    headers: supabaseHeaders()
+  });
+  if (!response.ok) return loadCachedTradeRows();
+  const rows = await response.json();
+  if (!Array.isArray(rows)) return loadCachedTradeRows();
+  return rows.filter(tradeInvolvesMe);
+}
+
+async function patchTradeRow(code, body) {
+  const path = `${tradesTable()}?code=eq.${encodeURIComponent(code)}&status=eq.pending`;
+  const response = await fetch(supabaseUrl(path), {
+    method: "PATCH",
+    headers: supabaseHeaders({ Prefer: "return=representation" }),
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    throw new Error(await supabaseErrorMessage(response, "The trade could not be updated."));
+  }
+  const rows = await response.json().catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+function tradeHeadline(row) {
+  const role = tradeRole(row);
+  const other = tradeOtherName(row);
+  const amount = tradeAmountOf(row);
+  const unit = amount === 1 ? "challenge" : "challenges";
+  const state = tradeCardState(row);
+  const request = row?.kind === "request";
+  if (state === "pending") {
+    if (role === "sender") {
+      return request
+        ? `You asked ${other} for ${amount} ${unit}`
+        : `You offered ${amount} ${unit} to ${other}`;
+    }
+    return request
+      ? `${other} asks you for ${amount} ${unit}`
+      : `${other} offers you ${amount} ${unit}`;
+  }
+  if (row?.status === "accepted") {
+    if (tradeIAmGiver(row)) return `You gave ${amount} ${unit} to ${other}`;
+    return `You received ${amount} ${unit} from ${other}`;
+  }
+  if (row?.status === "declined") {
+    return role === "sender" ? `${other} declined` : "You declined";
+  }
+  if (row?.status === "cancelled") {
+    return role === "sender" ? "You cancelled this offer" : `${other} cancelled this offer`;
+  }
+  return "This offer expired at midnight";
+}
+
+function tradeCardMeta(row) {
+  const state = tradeCardState(row);
+  if (state === "pending") {
+    return tradeRole(row) === "sender"
+      ? "Waiting for an answer · the offer expires at midnight"
+      : "Answer before midnight · slots count for today only";
+  }
+  if (row?.status === "accepted") return "Settled · today's challenge count is updated";
+  return "Closed · no slots changed hands";
+}
+
+function tradeCard(row) {
+  const card = document.createElement("article");
+  const state = tradeCardState(row);
+  card.className = `trade-card ${state} ${tradeIAmGiver(row) ? "give" : "take"}`;
+
+  const head = document.createElement("div");
+  head.className = "trade-card-head";
+  const title = document.createElement("div");
+  title.className = "trade-card-title";
+  title.append(challengeNameWithAvatar(tradeOtherName(row)));
+  const headline = document.createElement("span");
+  headline.className = "trade-card-headline";
+  headline.textContent = tradeHeadline(row);
+  title.append(headline);
+  const amount = document.createElement("div");
+  amount.className = `trade-card-amount ${tradeIAmGiver(row) ? "give" : "take"}`;
+  amount.textContent = `${tradeIAmGiver(row) ? "−" : "+"}${tradeAmountOf(row)}`;
+  head.append(title, amount);
+  card.append(head);
+
+  const note = cleanChallengeName(row?.note || "");
+  if (note) {
+    const noteEl = document.createElement("div");
+    noteEl.className = "trade-card-note";
+    noteEl.textContent = `“${note}”`;
+    card.append(noteEl);
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "trade-card-meta";
+  meta.textContent = tradeCardMeta(row);
+  card.append(meta);
+
+  if (state !== "pending") return card;
+
+  const actions = document.createElement("div");
+  actions.className = "trade-card-actions";
+  if (tradeRole(row) === "receiver") {
+    const accept = document.createElement("button");
+    accept.type = "button";
+    accept.className = "trade-accept-button";
+    accept.textContent = row?.kind === "request" ? "Give slots" : "Accept";
+    accept.addEventListener("click", () => respondToTrade(row, "accepted"));
+    const decline = document.createElement("button");
+    decline.type = "button";
+    decline.className = "trade-decline-button";
+    decline.textContent = "Decline";
+    decline.addEventListener("click", () => respondToTrade(row, "declined"));
+    actions.append(accept, decline);
+  } else {
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "trade-decline-button";
+    cancel.textContent = "Cancel offer";
+    cancel.addEventListener("click", () => respondToTrade(row, "cancelled"));
+    actions.append(cancel);
+  }
+  card.append(actions);
+  return card;
+}
+
+function tradeSection(key, title, rows) {
+  const section = document.createElement("section");
+  section.className = `trade-section trade-section-${key}`;
+  const head = document.createElement("div");
+  head.className = "trade-section-head";
+  const label = document.createElement("span");
+  label.textContent = title;
+  const count = document.createElement("span");
+  count.className = "trade-section-count";
+  count.textContent = String(rows.length);
+  head.append(label, count);
+  const body = document.createElement("div");
+  body.className = "trade-section-body";
+  rows.forEach((row) => body.append(tradeCard(row)));
+  section.append(head, body);
+  return section;
+}
+
+function updateTradeSummary() {
+  const balance = loadTradeBalance();
+  if (tradeBalanceEl) {
+    tradeBalanceEl.textContent = `Received +${balance.received} · Given −${balance.given}${balance.reserved ? ` · Offered −${balance.reserved}` : ""}`;
+  }
+  if (tradeFreeSlotsEl) {
+    const free = tradeFreeSlots();
+    tradeFreeSlotsEl.textContent = `${free} free of ${challengeDailyLimit()}`;
+  }
+}
+
+function renderTradePanel(text) {
+  if (!tradePanelEl) return;
+  tradePanelEl.hidden = gameType !== "trade";
+  if (tradeStatusEl) {
+    tradeStatusEl.hidden = !text;
+    tradeStatusEl.textContent = text || "";
+  }
+  updateTradeSummary();
+}
+
+function renderTradeCards(rows = tradeRows) {
+  if (!tradeHistoryEl) return;
+  tradeHistoryEl.innerHTML = "";
+  updateTradeSummary();
+  const mine = (Array.isArray(rows) ? rows : []).filter(tradeInvolvesMe);
+  const inbox = mine.filter((row) => tradeCardState(row) === "pending" && tradeRole(row) === "receiver");
+  const outbox = mine.filter((row) => tradeCardState(row) === "pending" && tradeRole(row) === "sender");
+  const settled = mine
+    .filter((row) => tradeCardState(row) !== "pending")
+    .sort((first, second) => (
+      (Date.parse(second.updated_at || second.created_at || "") || 0) -
+      (Date.parse(first.updated_at || first.created_at || "") || 0)
+    ))
+    .slice(0, 12);
+  const sections = [
+    ["inbox", "Waiting for you", inbox],
+    ["outbox", "Your open offers", outbox],
+    ["settled", "Settled today", settled]
+  ].filter(([, , sectionRows]) => sectionRows.length);
+  if (!sections.length) {
+    const empty = document.createElement("div");
+    empty.className = "trade-empty";
+    empty.textContent = "No trades today. Offer a spare challenge to a friend, or ask for one.";
+    tradeHistoryEl.append(empty);
+    return;
+  }
+  sections.forEach(([key, title, sectionRows]) => tradeHistoryEl.append(tradeSection(key, title, sectionRows)));
+}
+
+function updateTradeBadge(rows = []) {
+  const button = typeButtons.find((item) => item.dataset.type === "trade");
+  if (!button) return;
+  const pending = rows.filter((row) => tradeCardState(row) === "pending");
+  const waitingForReply = pending.filter((row) => tradeRole(row) === "sender").length;
+  const waitingForMe = pending.filter((row) => tradeRole(row) === "receiver").length;
+  if (waitingForReply) button.dataset.sentCount = String(waitingForReply);
+  else delete button.dataset.sentCount;
+  if (waitingForMe) button.dataset.receivedCount = String(waitingForMe);
+  else delete button.dataset.receivedCount;
+}
+
+function notifyTradeEvents(rows = []) {
+  rows.forEach((row) => {
+    if (!tradeIsToday(row)) return;
+    const role = tradeRole(row);
+    const other = tradeOtherName(row);
+    const amount = tradeAmountOf(row);
+    const unit = amount === 1 ? "challenge" : "challenges";
+    if (role === "receiver" && tradeCardState(row) === "pending") {
+      petkoNotify(
+        `trade-offer-${row.code}`,
+        row.kind === "request" ? "Trade request" : "Trade offer",
+        row.kind === "request"
+          ? `${other} asks you for ${amount} ${unit}.`
+          : `${other} offers you ${amount} ${unit}.`,
+        `pwq-trade-${row.code}`
+      );
+      return;
+    }
+    if (role === "sender" && row.status === "accepted") {
+      petkoNotify(
+        `trade-accepted-${row.code}`,
+        "Trade accepted",
+        `${other} accepted. ${amount} ${unit} changed hands.`,
+        `pwq-trade-${row.code}`
+      );
+    }
+  });
+}
+
+function tradeSyncSnapshotFor(rows = []) {
+  return rows
+    .map((row) => [row.code, row.status, row.kind, row.amount, row.to_device, row.updated_at]
+      .map((value) => value ?? "")
+      .join("|"))
+    .sort()
+    .join("\n");
+}
+
+function shouldPollTradeSync() {
+  if (!supabaseConfigured()) return false;
+  if (document.visibilityState === "hidden") return false;
+  if (gameType === "trade" || gameType === "challenge") return true;
+  return loadCachedTradeRows().some((row) => tradeCardState(row) === "pending");
+}
+
+function applyTradeRows(rows = [], { force = false } = {}) {
+  tradeRows = (Array.isArray(rows) ? rows : []).filter(tradeInvolvesMe);
+  saveCachedTradeRows(tradeRows);
+  saveTradeBalance(computeTradeBalance(tradeRows));
+  updateChallengeQuota();
+  updateTradeBadge(tradeRows);
+  notifyTradeEvents(tradeRows);
+  const snapshot = tradeSyncSnapshotFor(tradeRows);
+  const changed = force || snapshot !== tradeSyncSnapshot;
+  tradeSyncSnapshot = snapshot;
+  if (changed && gameType === "trade") renderTradeCards(tradeRows);
+}
+
+async function syncTradeState({ force = false } = {}) {
+  if (!force && !shouldPollTradeSync()) return;
+  if (tradeSyncBusy) return;
+  tradeSyncBusy = true;
+  try {
+    const rows = await fetchTradeRows().catch(() => loadCachedTradeRows());
+    applyTradeRows(rows, { force });
+  } finally {
+    tradeSyncBusy = false;
+  }
+}
+
+async function respondToTrade(row, status) {
+  if (tradeBusy || !row?.code) return false;
+  const role = tradeRole(row);
+  const amount = tradeAmountOf(row);
+  if (status === "cancelled" && role !== "sender") return false;
+  if (status !== "cancelled" && role !== "receiver") return false;
+  if (status === "accepted" && tradeIAmGiver(row) && amount > tradeFreeSlots()) {
+    renderTradePanel(`You only have ${tradeFreeSlots()} free challenges today.`);
+    return false;
+  }
+  tradeBusy = true;
+  renderTradePanel(status === "accepted" ? "Settling the trade..." : "Updating the trade...");
+  try {
+    const payload = { status };
+    if (role === "receiver") payload.to_device = profileDeviceId();
+    const updated = await patchTradeRow(row.code, payload);
+    if (!updated.length) {
+      renderTradePanel("This trade was already answered.");
+    } else if (status === "accepted") {
+      renderTradePanel(tradeIAmGiver(row)
+        ? `You gave ${amount} ${amount === 1 ? "challenge" : "challenges"} to ${tradeOtherName(row)}.`
+        : `${tradeOtherName(row)} gave you ${amount} ${amount === 1 ? "challenge" : "challenges"} for today.`);
+    } else {
+      renderTradePanel(status === "cancelled" ? "Offer cancelled." : "Offer declined.");
+    }
+  } catch (error) {
+    renderTradePanel(error?.message || "The trade could not be updated.");
+    return false;
+  } finally {
+    tradeBusy = false;
+  }
+  await syncTradeState({ force: true }).catch(() => {});
+  return true;
+}
+
+async function createTradeOffer({ kind, amount, opponent, note }) {
+  if (!supabaseConfigured()) {
+    setTradeModalMessage("Trading requires an active Supabase project.");
+    return false;
+  }
+  const nickname = loadPlayerName();
+  if (!nickname || !hasRegisteredPlayerProfile()) {
+    closeTradeModal();
+    openProfileModal();
+    return false;
+  }
+  const target = cleanChallengeName(opponent);
+  if (!target) {
+    setTradeModalMessage("Choose a player first.");
+    return false;
+  }
+  if (sameChallengeName(target, nickname)) {
+    setTradeModalMessage("You cannot trade with yourself.");
+    return false;
+  }
+  const slots = Math.max(1, Math.min(TRADE_MAX_AMOUNT, Number(amount) || 1));
+  if (kind === "send" && slots > tradeFreeSlots()) {
+    setTradeModalMessage(`You have only ${tradeFreeSlots()} free challenges to give today.`);
+    return false;
+  }
+  if (tradeOffersSentToday() >= TRADE_DAILY_OFFER_LIMIT) {
+    setTradeModalMessage(`You can open ${TRADE_DAILY_OFFER_LIMIT} trades per day.`);
+    return false;
+  }
+  tradeBusy = true;
+  setTradeModalMessage("Sending...");
+  try {
+    const response = await fetch(supabaseUrl(tradesTable()), {
+      method: "POST",
+      headers: supabaseHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify({
+        code: tradeCode(),
+        day: todayId(),
+        kind,
+        amount: slots,
+        note: cleanChallengeName(note).slice(0, 80) || null,
+        from_nickname: nickname,
+        from_device: profileDeviceId(),
+        to_nickname: target,
+        status: "pending"
+      })
+    });
+    if (!response.ok) {
+      setTradeModalMessage(await supabaseErrorMessage(response, "The trade offer was not created."));
+      return false;
+    }
+  } catch {
+    setTradeModalMessage("Sending the offer failed. Try again.");
+    return false;
+  } finally {
+    tradeBusy = false;
+  }
+  closeTradeModal();
+  renderTradePanel(kind === "request"
+    ? `You asked ${target} for ${slots} ${slots === 1 ? "challenge" : "challenges"}.`
+    : `You offered ${slots} ${slots === 1 ? "challenge" : "challenges"} to ${target}.`);
+  await syncTradeState({ force: true }).catch(() => {});
+  return true;
+}
+
+function setTradeModalMessage(text) {
+  if (tradeModalMessage) tradeModalMessage.textContent = text || "";
+}
+
+function setTradeOfferKind(kind) {
+  tradeOfferKind = kind === "request" ? "request" : "send";
+  tradeKindButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.tradeKind === tradeOfferKind);
+    button.setAttribute("aria-pressed", button.dataset.tradeKind === tradeOfferKind ? "true" : "false");
+  });
+  if (tradeModalSubmit) {
+    tradeModalSubmit.textContent = tradeOfferKind === "request" ? "Ask for challenges" : "Offer challenges";
+  }
+  setTradeOfferAmount(tradeOfferAmount);
+}
+
+function tradeMaxOfferAmount() {
+  if (tradeOfferKind === "request") return TRADE_MAX_AMOUNT;
+  return Math.max(1, Math.min(TRADE_MAX_AMOUNT, tradeFreeSlots()));
+}
+
+function setTradeOfferAmount(value) {
+  const max = tradeMaxOfferAmount();
+  tradeOfferAmount = Math.max(1, Math.min(max, Number(value) || 1));
+  if (tradeAmountValue) tradeAmountValue.textContent = String(tradeOfferAmount);
+  if (tradeAmountDown) tradeAmountDown.disabled = tradeOfferAmount <= 1;
+  if (tradeAmountUp) tradeAmountUp.disabled = tradeOfferAmount >= max;
+}
+
+function selectTradePlayer(name) {
+  tradePickerSelected = name;
+  if (tradeModalSubmit) tradeModalSubmit.disabled = !name;
+  if (!tradePickerGrid) return;
+  [...tradePickerGrid.querySelectorAll(".challenge-picker-player")].forEach((button) => {
+    button.setAttribute("aria-pressed", button.dataset.value === name ? "true" : "false");
+  });
+}
+
+function renderTradePickerGrid() {
+  if (!tradePickerGrid) return;
+  const term = cleanChallengeName(tradePickerSearch?.value || "").toLocaleLowerCase("sr");
+  const favorites = loadChallengeFavorites();
+  const favoriteRank = (name) => {
+    const index = favorites.indexOf(challengeFavoriteId(name));
+    return index === -1 ? 9999 : index;
+  };
+  tradePickerGrid.innerHTML = "";
+  if (!tradePickerPlayers.length) {
+    const empty = document.createElement("div");
+    empty.className = "trade-empty";
+    empty.textContent = "No other registered players yet.";
+    tradePickerGrid.append(empty);
+    return;
+  }
+  tradePickerPlayers
+    .filter((name) => !term || name.toLocaleLowerCase("sr").includes(term))
+    .sort((first, second) => {
+      const firstFavorite = favoriteRank(first);
+      const secondFavorite = favoriteRank(second);
+      if (firstFavorite !== secondFavorite) return firstFavorite - secondFavorite;
+      return first.localeCompare(second, "sr");
+    })
+    .forEach((name) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "challenge-picker-player";
+      button.classList.toggle("favorite", isChallengeFavorite(name));
+      button.dataset.value = name;
+      button.setAttribute("aria-pressed", name === tradePickerSelected ? "true" : "false");
+      const avatar = document.createElement("span");
+      avatar.className = "profile-avatar";
+      renderAvatarForName(avatar, name);
+      const label = document.createElement("span");
+      label.className = "challenge-picker-player-name";
+      label.textContent = name;
+      button.append(avatar, label);
+      button.addEventListener("click", () => selectTradePlayer(name));
+      tradePickerGrid.append(button);
+    });
+}
+
+function closeTradeModal() {
+  if (tradeModal) tradeModal.hidden = true;
+  tradeBusy = false;
+  setTradeModalMessage("");
+}
+
+async function openTradeModal() {
+  if (!tradeModal) return;
+  if (!hasRegisteredPlayerProfile()) {
+    openProfileModal();
+    return;
+  }
+  tradeModal.hidden = false;
+  tradeBusy = false;
+  tradePickerSelected = "";
+  if (tradeModalSubmit) tradeModalSubmit.disabled = true;
+  if (tradeNoteInput) tradeNoteInput.value = "";
+  if (tradePickerSearch) tradePickerSearch.value = "";
+  setTradeModalMessage("");
+  setTradeOfferKind("send");
+  setTradeOfferAmount(1);
+  renderTradePickerGrid();
+  const players = await fetchChallengePlayers().catch(() => []);
+  tradePickerPlayers = Array.isArray(players) ? players : [];
+  renderTradePickerGrid();
+}
+
+function submitTradeOffer() {
+  if (tradeBusy) return;
+  createTradeOffer({
+    kind: tradeOfferKind,
+    amount: tradeOfferAmount,
+    opponent: tradePickerSelected,
+    note: tradeNoteInput?.value || ""
+  }).catch(() => setTradeModalMessage("Sending the offer failed. Try again."));
+}
+
+function showTradeLobby() {
+  saveChallengeProgress();
+  gameType = "trade";
+  done = true;
+  activeChallenge = null;
+  competitiveIntro = false;
+  competitiveRunActive = false;
+  document.body.dataset.gameType = gameType;
+  document.body.dataset.competitiveLocked = "false";
+  document.body.dataset.competitiveIntro = "false";
+  document.body.dataset.challengePlaying = "false";
+  document.body.dataset.challengeFinished = "false";
+  boardsEl.innerHTML = "";
+  keyboardEl.innerHTML = "";
+  renderSolutionsPanel(false);
+  hideWordReveal();
+  nextLevelButton.hidden = true;
+  modeLabelEl.textContent = "Trade";
+  messageEl.textContent = "Trade today's spare challenges with other players.";
+  tryCountEl.textContent = "0";
+  typeButtons.forEach((button) => button.classList.toggle("active", button.dataset.type === gameType));
+  updateModeButtons();
+  updateScoreDisplay();
+  if (!tradeRows.length) tradeRows = loadCachedTradeRows();
+  renderTradePanel("");
+  renderTradeCards(tradeRows);
+  syncTradeState({ force: true }).catch(() => {});
+}
+
 function loadPlayerName() {
   return (localStorage.getItem(PLAYER_NAME_KEY) || "").trim();
 }
@@ -20040,6 +20735,10 @@ function startGame(nextType = gameType, requestedMode, options = {}) {
   updateFridayTheme();
   if (nextType === "hall") {
     showHallOfFame();
+    return;
+  }
+  if (nextType === "trade") {
+    showTradeLobby();
     return;
   }
   if (!hasRegisteredPlayerProfile()) {
@@ -21509,6 +22208,10 @@ typeButtons.forEach((button) => {
     saveChallengeProgress();
     clearChallengePanelWords();
     const nextType = button.dataset.type;
+    if (nextType === "trade") {
+      showTradeLobby();
+      return;
+    }
     if (nextType === "challenge") {
       exitChallengeToLobby();
       return;
@@ -21711,6 +22414,42 @@ async function submitChallengePicker(event) {
 if (challengePickerSubmit) {
   challengePickerSubmit.addEventListener("click", submitChallengePicker);
   challengePickerSubmit.addEventListener("pointerup", submitChallengePicker);
+}
+
+if (openTradeButton) {
+  openTradeButton.addEventListener("click", () => {
+    openTradeModal().catch(() => setTradeModalMessage("Opening the player list failed."));
+  });
+}
+
+if (tradeModalClose) {
+  tradeModalClose.addEventListener("click", closeTradeModal);
+}
+
+if (tradeModal) {
+  tradeModal.addEventListener("click", (event) => {
+    if (event.target === tradeModal) closeTradeModal();
+  });
+}
+
+tradeKindButtons.forEach((button) => {
+  button.addEventListener("click", () => setTradeOfferKind(button.dataset.tradeKind));
+});
+
+if (tradeAmountDown) {
+  tradeAmountDown.addEventListener("click", () => setTradeOfferAmount(tradeOfferAmount - 1));
+}
+
+if (tradeAmountUp) {
+  tradeAmountUp.addEventListener("click", () => setTradeOfferAmount(tradeOfferAmount + 1));
+}
+
+if (tradePickerSearch) {
+  tradePickerSearch.addEventListener("input", renderTradePickerGrid);
+}
+
+if (tradeModalSubmit) {
+  tradeModalSubmit.addEventListener("click", submitTradeOffer);
 }
 
 if (acceptChallengeButton) {
@@ -22104,6 +22843,10 @@ document.addEventListener("keydown", (event) => {
     closeHallModal();
     return;
   }
+  if (tradeModal && !tradeModal.hidden) {
+    closeTradeModal();
+    return;
+  }
   setHelpOpen(false);
 });
 
@@ -22126,15 +22869,20 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", () => {
   syncChallengeState({ force: true }).catch(() => {});
+  syncTradeState({ force: true }).catch(() => {});
 });
 window.addEventListener("online", () => {
   syncChallengeState({ force: true }).catch(() => {});
+  syncTradeState({ force: true }).catch(() => {});
 });
 setInterval(updateCompetitiveCountdown, 1000);
 setInterval(notifyDailyEvents, 600000);
 setInterval(() => {
   syncChallengeState().catch(() => {});
 }, CHALLENGE_SYNC_INTERVAL_MS);
+setInterval(() => {
+  syncTradeState().catch(() => {});
+}, TRADE_SYNC_INTERVAL_MS);
 setInterval(() => {
   syncWeekendWitchAvatarState();
   updateChallengeQuota();
@@ -22155,6 +22903,7 @@ async function bootPetkoApp() {
   syncWeekendWitchAvatarState();
   weekendWitchChallengeBonus();
   refreshManualChallengeCredit().catch(() => {});
+  syncTradeState({ force: true }).catch(() => {});
   const incomingChallengeCode = new URLSearchParams(window.location.search).get("challenge");
   if (incomingChallengeCode) {
     startGame("challenge");
