@@ -37,6 +37,42 @@ const SUPABASE_CONFIG = {
 
 Without these values the app uses local results only.
 
+## G-Lab Trade
+
+`G-Lab Trade` is the house promo module that drives the banner slot in the status panel. The slot replaces the G-Lab signature for the first 5 minutes of every half hour, and one campaign is drawn per half-hour cycle.
+
+A campaign is either a **banner image** (`image`) or a **text card** (`title`, `subtitle`, `cta`). Defaults live in the `TRADE_CAMPAIGNS` list in `app.js`:
+
+```js
+{
+  id: "numerology",              // unique campaign key
+  title: "Numerology",
+  subtitle: "Astrology and Tarot by G-Lab",
+  cta: "Open app",
+  href: "https://dragangagy.github.io/numerology-app/",
+  label: "Open Numerology App", // aria-label for the link
+  image: "ad-numerology.png",   // optional; omit to render the text card
+  alt: "Numerology, Astrology and Tarot app",
+  weight: 3                     // higher weight = drawn more often
+}
+```
+
+Optional fields: `dailyCap` (max views per day, `0` = unlimited), `start` / `end` (`YYYY-MM-DD`, inclusive), `days` (`0`–`6`, Sunday first), `hours` (`0`–`23`), and `enabled`.
+
+Rotation draws from a shuffled deck holding one card per weight point, so `weight: 3` against `weight: 1` really does win three cycles out of four, and an immediate repeat is swapped out whenever another card is queued. The draw is stored in `localStorage`, so every tab and every reload inside one cycle shows the same campaign and counts a single view.
+
+### Remote campaigns and reporting
+
+Run `sql/2026-08-18-glab-trade.sql` to add the optional `trade_campaigns` and `trade_events` tables. When `trade_campaigns` has active rows they replace the built-in defaults and get cached locally, so campaigns can change without a redeploy. Views and clicks are queued locally and flushed to `trade_events`; the `trade_campaign_stats` view rolls them up per day. Both tables are optional — without them the module runs fully offline on the defaults.
+
+QA helpers:
+
+- `?trade=1` forces the slot open for the current cycle draw
+- `?trade=petko` pins a specific campaign
+- In the console, `window.glabTrade` exposes `campaigns()`, `stats()`, `refresh()`, and `preview("petko")` (`preview()` / `preview("off")` clears it)
+
+This module is promotional only — not in-game currency, gambling, or financial trading.
+
 ## Local preview
 
 Open `index.html` in a browser, or serve the folder with any static server.
