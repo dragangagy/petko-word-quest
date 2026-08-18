@@ -22348,9 +22348,9 @@ function saveTradeRotation(rotation) {
 function tradeCampaignForCycle(cycle, now = new Date()) {
   const rotation = loadTradeRotation();
   if (rotation?.cycle === cycle) {
-    // Every tab and every reload inside one cycle keeps the campaign already drawn.
+    // One draw per cycle, so every tab and every reload keeps the same campaign.
     const held = tradeCampaignList.find((campaign) => campaign.id === rotation.id);
-    if (held && tradeCampaignScheduled(held, now)) return held;
+    return held && tradeCampaignScheduled(held, now) ? held : null;
   }
   const chosen = pickTradeCampaign(eligibleTradeCampaigns(now), rotation?.id);
   if (chosen) saveTradeRotation({ cycle, id: chosen.id, viewed: false });
