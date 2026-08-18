@@ -200,6 +200,7 @@ let activeTab = "market";
 let activeAsset = null; // symbol or null
 let activeTimeframe = "1D";
 let orderSide = "buy";
+let sellAllIntent = false; // "Max" on the sell side closes the whole position even if the price drifts
 let toastTimer = 0;
 const sparkCanvases = new Map();
 
@@ -492,6 +493,7 @@ function drawChart(asset, now, up) {
 
 function setOrderSide(side) {
   orderSide = side;
+  sellAllIntent = false;
   dom.sideBuyButton.classList.toggle("active", side === "buy");
   dom.sideSellButton.classList.toggle("active", side === "sell");
   dom.confirmButton.classList.toggle("buy", side === "buy");
@@ -508,8 +510,8 @@ function orderCap(asset, price) {
 }
 
 function renderOrderPreview(asset, price) {
-  const amount = parseFloat(dom.amountInput.value);
   const cap = orderCap(asset, price);
+  const amount = sellAllIntent && orderSide === "sell" ? cap : parseFloat(dom.amountInput.value);
   const verb = orderSide === "buy" ? "Buy" : "Sell";
 
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -542,7 +544,7 @@ function executeOrder() {
   const asset = assetBySym.get(activeAsset);
   const now = Date.now();
   const price = priceAt(asset, now);
-  const amount = parseFloat(dom.amountInput.value);
+  const amount = sellAllIntent && orderSide === "sell" ? orderCap(asset, price) : parseFloat(dom.amountInput.value);
   if (!Number.isFinite(amount) || amount <= 0) return;
 
   if (orderSide === "buy") {
@@ -561,7 +563,7 @@ function executeOrder() {
     const pos = state.positions[asset.sym];
     if (!pos || pos.qty <= 0) return;
     const heldValue = pos.qty * price;
-    const sellValue = Math.min(amount, heldValue);
+    const sellValue = sellAllIntent ? heldValue : Math.min(amount, heldValue);
     let qty = sellValue / price;
     if (qty > pos.qty - 1e-9 || heldValue - sellValue < 0.01) qty = pos.qty; // close out dust
     const gross = qty * price;
@@ -578,6 +580,7 @@ function executeOrder() {
   }
 
   dom.amountInput.value = "";
+  sellAllIntent = false;
   saveState();
   renderAll(now);
 }
@@ -740,6 +743,7 @@ dom.sideBuyButton.addEventListener("click", () => setOrderSide("buy"));
 dom.sideSellButton.addEventListener("click", () => setOrderSide("sell"));
 
 dom.amountInput.addEventListener("input", () => {
+  sellAllIntent = false;
   if (!activeAsset) return;
   const asset = assetBySym.get(activeAsset);
   renderOrderPreview(asset, priceAt(asset, Date.now()));
@@ -751,6 +755,7 @@ document.querySelectorAll(".quick-button").forEach((button) => {
     const asset = assetBySym.get(activeAsset);
     const cap = orderCap(asset, priceAt(asset, Date.now()));
     const part = parseFloat(button.dataset.part);
+    sellAllIntent = orderSide === "sell" && part === 1;
     dom.amountInput.value = (Math.floor(cap * part * 100) / 100).toString();
     renderOrderPreview(asset, priceAt(asset, Date.now()));
   });
