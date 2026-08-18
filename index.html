@@ -7,10 +7,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Petko Word Quest">
     <title>Petko Word Quest</title>
-    <link rel="manifest" href="manifest.webmanifest?v=6">
+    <link rel="manifest" href="manifest.webmanifest?v=7">
     <link rel="icon" href="app-icon-store.png" type="image/png">
     <link rel="apple-touch-icon" href="app-icon-store.png">
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=7">
   </head>
   <body>
     <div class="petko-splash" id="petkoSplash" role="dialog" aria-label="Petko Word Quest" aria-modal="true">
@@ -75,6 +75,7 @@
         <button class="type-button active" type="button" data-type="normal">Classic</button>
         <button class="type-button" type="button" data-type="competitive">Competitive</button>
         <button class="type-button" type="button" data-type="challenge">Challenge</button>
+        <button class="type-button" type="button" data-type="trade">Trade</button>
         <button class="type-button" type="button" data-type="hall">Medals</button>
       </section>
 
@@ -86,7 +87,7 @@
           <div class="challenge-quota" id="challengeQuota">Challenges 0/1</div>
           <div class="challenge-hint"><span>Pick an opponent</span><span>then send a challenge</span></div>
           <button id="createChallengeButton" type="button">Challenge</button>
-          <div class="challenge-extra-note">Play Competitive to unlock more challenges</div>
+          <div class="challenge-extra-note">Play Competitive to unlock more challenges. Unused extras can be traded.</div>
         </div>
         <div class="challenge-player-picker" id="challengePlayerPicker" hidden>
           <button class="challenge-player-select" id="challengePlayerButton" type="button" aria-expanded="false">Challenge Petko</button>
@@ -100,6 +101,32 @@
           <button id="checkChallengeButton" type="button" hidden>Check</button>
         </div>
         <div class="challenge-history" id="challengeHistory"></div>
+      </section>
+
+      <section class="trade-panel" id="tradePanel" hidden aria-live="polite">
+        <div class="trade-copy" id="tradeStatus"></div>
+        <div class="trade-wallet" id="tradeWallet">
+          <div class="trade-wallet-item">
+            <span>G-Lab extras</span>
+            <strong id="tradeBonusCount">0</strong>
+          </div>
+          <div class="trade-wallet-item">
+            <span>Unused today</span>
+            <strong id="tradeUnusedCount">0</strong>
+          </div>
+        </div>
+        <div class="trade-actions">
+          <button id="tradeBankButton" type="button">Bank 2 unused</button>
+          <button id="tradeSendButton" type="button">Send extra</button>
+          <button id="tradeOpenButton" type="button">Open offer</button>
+        </div>
+        <div class="trade-hint">Send unused extras or G-Lab extras to another player. Open offers can be claimed by anyone.</div>
+        <div class="trade-board-head">
+          <span>Open board</span>
+          <button id="refreshTradeButton" type="button">Refresh</button>
+        </div>
+        <div class="trade-board" id="tradeBoard"></div>
+        <div class="trade-history" id="tradeHistory"></div>
       </section>
 
       <section class="hall-panel" id="hallPanel" hidden aria-live="polite">
@@ -139,7 +166,7 @@
         <img class="idle-petko-competitive" src="22.png" alt="">
         <img class="idle-petko-challenge" src="18.png" alt="">
         <div class="weekend-witch-scoreboard" id="weekendWitchScoreboard" hidden></div>
-        <img class="idle-witch-weekend-poster" src="witch-weekend-poster.png?v=6" alt="">
+        <img class="idle-witch-weekend-poster" src="witch-weekend-poster.png?v=7" alt="">
         <div class="weekend-witch-winner" id="weekendWitchWinner" hidden></div>
       </section>
 
@@ -239,6 +266,19 @@
             <li>Receiving challenges is unlimited.</li>
             <li>Played challenge results show as blue cards and clear after midnight.</li>
             <li>A challenge is played only after the opponent accepts the code or link.</li>
+            <li>Unused extras can be sent or banked in G-Lab Trade.</li>
+          </ul>
+        </details>
+        <details class="help-section">
+          <summary>G-Lab Trade</summary>
+          <ul>
+            <li>Trade is a player-to-player board for extra challenges. It is not money, gambling, or financial trading.</li>
+            <li>Unused extras today can be sent to another player, posted as an open offer, or banked as G-Lab extras.</li>
+            <li>Banking converts 2 unused extras into 1 lasting G-Lab extra on your profile. One extra is the bank fee.</li>
+            <li>A G-Lab extra raises your allowed challenge count and stays on your profile.</li>
+            <li>Send extra picks a registered player. They must accept within 6 hours.</li>
+            <li>Open offers sit on the public board until someone claims them.</li>
+            <li>If a trade expires or is cancelled, extras return to the sender.</li>
           </ul>
         </details>
         <details class="help-section">
@@ -248,7 +288,7 @@
             <li>In the profile you can change your player name and avatar.</li>
             <li>Tap the avatar image to open avatar selection.</li>
             <li>The link code lets you use the same profile on multiple devices.</li>
-            <li>When you link a profile, results, challenges, and medals stay tied to the same player.</li>
+            <li>When you link a profile, results, challenges, trades, and medals stay tied to the same player.</li>
             <li>Name changes are limited so leaderboards and challenges stay readable.</li>
           </ul>
         </details>
@@ -325,6 +365,6 @@
       </article>
     </div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
   </body>
 </html>

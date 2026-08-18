@@ -14898,6 +14898,11 @@ const CHALLENGE_PENDING_KEY = "pwq-challenge-pending-v1";
 const CHALLENGE_ACTIVE_KEY = "pwq-challenge-active-v1";
 const CHALLENGE_CANCELLED_KEY = "pwq-challenge-cancelled-v1";
 const CHALLENGE_MANUAL_CREDIT_KEY = "pwq-challenge-manual-credit-v1";
+const TRADE_SENT_KEY = "pwq-trade-sent-v1";
+const TRADE_BANK_KEY = "pwq-trade-bank-v1";
+const TRADE_PENDING_MS = 21600000;
+const TRADE_BANK_UNUSED_COST = 2;
+const TRADE_BANK_BONUS_GAIN = 1;
 const CHALLENGE_PLAYED_KEY = "pwq-challenge-played-v1";
 const CHALLENGE_RESULT_PENDING_KEY = "pwq-challenge-result-pending-v1";
 const RESULT_STORAGE_KEY = "pwq-competitive-results-v2";
@@ -15081,7 +15086,8 @@ const SUPABASE_CONFIG = {
   weekendResultsTable: "weekend_results",
   normalStatsTable: "normal_stats",
   playersTable: "players",
-  wordsTable: "words"
+  wordsTable: "words",
+  tradesTable: "trades"
 };
 
 const boardsEl = document.querySelector("#boards");
@@ -15141,6 +15147,16 @@ const profileAvatarUnlockNote = document.querySelector("#profileAvatarUnlockNote
 const profileMessage = document.querySelector("#profileMessage");
 const profileAvatarTabs = [...document.querySelectorAll("[data-avatar-tab]")];
 const challengePanelEl = document.querySelector("#challengePanel");
+const tradePanelEl = document.querySelector("#tradePanel");
+const tradeStatusEl = document.querySelector("#tradeStatus");
+const tradeBonusCountEl = document.querySelector("#tradeBonusCount");
+const tradeUnusedCountEl = document.querySelector("#tradeUnusedCount");
+const tradeBankButton = document.querySelector("#tradeBankButton");
+const tradeSendButton = document.querySelector("#tradeSendButton");
+const tradeOpenButton = document.querySelector("#tradeOpenButton");
+const refreshTradeButton = document.querySelector("#refreshTradeButton");
+const tradeBoardEl = document.querySelector("#tradeBoard");
+const tradeHistoryEl = document.querySelector("#tradeHistory");
 const challengeStatusEl = document.querySelector("#challengeStatus");
 const challengePlayerNameEl = document.querySelector("#challengePlayerName");
 const challengeQuotaEl = document.querySelector("#challengeQuota");
@@ -15154,6 +15170,7 @@ const checkChallengeButton = document.querySelector("#checkChallengeButton");
 const challengeCodeTools = document.querySelector(".challenge-code-tools");
 const challengeHistoryEl = document.querySelector("#challengeHistory");
 const challengePickerModal = document.querySelector("#challengePickerModal");
+const challengePickerTitle = document.querySelector("#challengePickerTitle");
 const challengePickerClose = document.querySelector("#challengePickerClose");
 const challengePickerSearch = document.querySelector("#challengePickerSearch");
 const challengePickerStats = document.querySelector("#challengePickerStats");
@@ -15213,6 +15230,7 @@ let bonusFlashRows = new Set();
 let scoreBurstToken = 0;
 let activeChallenge = null;
 let challengePickerPlayers = [];
+let challengePickerMode = "challenge";
 let challengePickerRows = [];
 let challengeStatsRows = [];
 let onlineNormalStatsSummary = null;
@@ -16058,6 +16076,10 @@ function playersTable() {
   return SUPABASE_CONFIG.playersTable || "players";
 }
 
+function tradesTable() {
+  return SUPABASE_CONFIG.tradesTable || "trades";
+}
+
 function wordsTable() {
   return SUPABASE_CONFIG.wordsTable || "words";
 }
@@ -16162,6 +16184,29 @@ function loadManualChallengeCredit() {
   }
 }
 
+function saveManualChallengeCredit(credit) {
+  const next = Math.max(0, Number(credit) || 0);
+  localStorage.setItem(CHALLENGE_MANUAL_CREDIT_KEY, String(next));
+  updateChallengeQuota();
+  updateTradeWallet();
+  return next;
+}
+
+async function persistManualChallengeCredit(credit = loadManualChallengeCredit()) {
+  const next = saveManualChallengeCredit(credit);
+  if (!supabaseConfigured() || !profileDeviceId()) return next;
+  const encodedDevice = encodeURIComponent(profileDeviceId());
+  const name = normalizePlayerName(loadPlayerName() || "");
+  const jobs = [
+    patchSupabaseRows(`${playersTable()}?device_id=eq.${encodedDevice}`, { challenge_bonus: next })
+  ];
+  if (name) {
+    jobs.push(patchSupabaseRows(`${playersTable()}?nickname=eq.${encodeURIComponent(name)}`, { challenge_bonus: next }));
+  }
+  await Promise.allSettled(jobs);
+  return next;
+}
+
 async function refreshManualChallengeCredit() {
   if (!supabaseConfigured() || !profileDeviceId()) return loadManualChallengeCredit();
   const query = [
@@ -16173,8 +16218,7 @@ async function refreshManualChallengeCredit() {
   if (!response.ok) return loadManualChallengeCredit();
   const rows = await response.json();
   const credit = Math.max(0, Number(rows?.[0]?.challenge_bonus) || 0);
-  localStorage.setItem(CHALLENGE_MANUAL_CREDIT_KEY, String(credit));
-  updateChallengeQuota();
+  saveManualChallengeCredit(credit);
   return credit;
 }
 
@@ -16694,8 +16738,85 @@ function sentChallengeRowsFromHistory(rows = []) {
 function updateChallengeQuota(rows = null) {
   if (!challengeQuotaEl) return;
   const count = Array.isArray(rows) ? dailyChallengeCount(rows) : dailyChallengeCount(loadSentChallengeRowsToday());
+  const spend = todayTradeUnusedSpend();
   const limit = challengeDailyLimit();
-  challengeQuotaEl.textContent = `Challenges ${Math.min(count, limit)}/${limit}`;
+  const used = Math.min(count + spend, limit);
+  challengeQuotaEl.textContent = `Challenges ${used}/${limit}`;
+  updateTradeWallet();
+}
+
+function loadTradeSentStore() {
+  try {
+    const data = JSON.parse(localStorage.getItem(TRADE_SENT_KEY) || "null");
+    if (data && typeof data === "object") return data;
+  } catch {}
+  return { entries: [] };
+}
+
+function saveTradeSentStore(store) {
+  const entries = (store?.entries || [])
+    .filter((entry) => entry && entry.code)
+    .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0))
+    .slice(0, 80);
+  localStorage.setItem(TRADE_SENT_KEY, JSON.stringify({ entries }));
+}
+
+function rememberTradeSent(row) {
+  if (!row?.code) return;
+  const store = loadTradeSentStore();
+  const next = {
+    code: String(row.code).toUpperCase(),
+    day: row.day || todayId(),
+    created_at: row.created_at || new Date().toISOString(),
+    offer_kind: row.offer_kind || "unused_today",
+    offer_amount: Math.max(1, Number(row.offer_amount) || 1),
+    status: row.status || "pending",
+    opponent: row.opponent || ""
+  };
+  store.entries = [next, ...(store.entries || []).filter((entry) => entry.code !== next.code)];
+  saveTradeSentStore(store);
+}
+
+function loadTradeBankStore() {
+  try {
+    const data = JSON.parse(localStorage.getItem(TRADE_BANK_KEY) || "null");
+    if (data && typeof data === "object") return data;
+  } catch {}
+  return {};
+}
+
+function todayTradeBankSpend() {
+  const data = loadTradeBankStore();
+  return data.date === todayId() ? Math.max(0, Number(data.spend) || 0) : 0;
+}
+
+function addTradeBankSpend(amount) {
+  const current = todayTradeBankSpend();
+  localStorage.setItem(TRADE_BANK_KEY, JSON.stringify({
+    date: todayId(),
+    spend: current + Math.max(0, Number(amount) || 0)
+  }));
+}
+
+function todayTradeUnusedSpend() {
+  const sent = (loadTradeSentStore().entries || []).filter((entry) => {
+    if ((entry.offer_kind || "unused_today") !== "unused_today") return false;
+    if (entry.status === "cancelled" || entry.status === "expired") return false;
+    const day = String(entry.day || "").slice(0, 10);
+    if (day && day === todayId()) return true;
+    const created = Date.parse(entry.created_at || "");
+    return Number.isFinite(created) && new Date(created).toISOString().slice(0, 10) === todayId();
+  });
+  const sentSpend = sent.reduce((sum, entry) => sum + Math.max(1, Number(entry.offer_amount) || 1), 0);
+  return todayTradeBankSpend() + sentSpend;
+}
+
+function remainingUnusedToday(challengeRows = null) {
+  const used = Array.isArray(challengeRows)
+    ? dailyChallengeCount(challengeRows)
+    : dailyChallengeCount(loadSentChallengeRowsToday());
+  const earnedLimit = Math.max(0, challengeDailyLimit() - loadManualChallengeCredit());
+  return Math.max(0, earnedLimit - used - todayTradeUnusedSpend());
 }
 
 async function fetchSentChallengesToday() {
@@ -17006,17 +17127,29 @@ function closeChallengePicker() {
   if (challengePickerModal) challengePickerModal.hidden = true;
   if (challengePlayerButton) challengePlayerButton.setAttribute("aria-expanded", "false");
   challengePickerBusy = false;
+  challengePickerMode = "challenge";
   if (challengePickerMessage) challengePickerMessage.textContent = "";
+  if (challengePickerSubmit) challengePickerSubmit.textContent = "Challenge";
+  if (challengePickerTitle) challengePickerTitle.textContent = "Choose opponent";
 }
 
-async function openChallengePicker() {
+async function openChallengePicker(mode = "challenge") {
   if (!challengePickerModal) return;
+  challengePickerMode = mode === "trade" ? "trade" : "challenge";
   challengePickerModal.hidden = false;
   challengePickerBusy = false;
   challengePickerSelected = "";
   if (challengePlayerSelect) challengePlayerSelect.value = "";
-  if (challengePlayerButton) challengePlayerButton.textContent = "Challenge Petko";
-  if (challengePickerSubmit) challengePickerSubmit.disabled = true;
+  if (challengePlayerButton) {
+    challengePlayerButton.textContent = challengePickerMode === "trade" ? "Send extra" : "Challenge Petko";
+  }
+  if (challengePickerTitle) {
+    challengePickerTitle.textContent = challengePickerMode === "trade" ? "Send extra to" : "Choose opponent";
+  }
+  if (challengePickerSubmit) {
+    challengePickerSubmit.disabled = true;
+    challengePickerSubmit.textContent = challengePickerMode === "trade" ? "Send extra" : "Challenge";
+  }
   if (challengePickerMessage) challengePickerMessage.textContent = "";
   if (challengePickerSearch) challengePickerSearch.value = "";
   renderChallengePickerStats(challengePickerSelected);
@@ -17899,7 +18032,7 @@ function renderWeekendWitchScoreboard(rows = []) {
     weekendWitchScoreboardEl.innerHTML = "";
     if (weekendWitchWinnerEl) weekendWitchWinnerEl.hidden = true;
     if (idleWitchWeekendPosterEl) {
-      idleWitchWeekendPosterEl.src = "witch-weekend-poster.png?v=6";
+      idleWitchWeekendPosterEl.src = "witch-weekend-poster.png?v=7";
       idleWitchWeekendPosterEl.alt = "";
     }
     return;
@@ -17932,7 +18065,7 @@ function renderWeekendWitchScoreboard(rows = []) {
   if (idleWitchWeekendPosterEl) {
     idleWitchWeekendPosterEl.src = showFinalWinner
       ? witchHuntWinnerImage(winningFaction, displayWindow)
-      : "witch-weekend-poster.png?v=6";
+      : "witch-weekend-poster.png?v=7";
     idleWitchWeekendPosterEl.alt = showFinalWinner ? "Witch Hunt winners" : "";
   }
   if (weekendWitchWinnerEl) {
@@ -18569,7 +18702,7 @@ async function createChallenge(selectedOpponent = null) {
   }
   const sentToday = await fetchSentChallengesToday().catch(() => loadSentChallengeRowsToday());
   updateChallengeQuota(sentToday);
-  const sentCount = dailyChallengeCount(sentToday);
+  const sentCount = dailyChallengeCount(sentToday) + todayTradeUnusedSpend();
   const dailyLimit = challengeDailyLimit();
   if (!shareAfterCreate && sentCount >= dailyLimit) {
     renderChallengePanel(`You have already sent ${dailyLimit} challenges today.`);
@@ -19528,6 +19661,8 @@ async function renamePlayerEverywhere(oldName, newName) {
     patchSupabaseRows(`${normalStatsTable()}?nickname=eq.${oldFilter}`, { nickname: newName }),
     patchSupabaseRows(`${challengeTable()}?creator=eq.${oldFilter}`, { creator: newName }),
     patchSupabaseRows(`${challengeTable()}?opponent=eq.${oldFilter}`, { opponent: newName }),
+    patchSupabaseRows(`${tradesTable()}?creator=eq.${oldFilter}`, { creator: newName }),
+    patchSupabaseRows(`${tradesTable()}?opponent=eq.${oldFilter}`, { opponent: newName }),
     callSupabaseRpc("rename_challenge_stats_player", { old_name: oldName, new_name: newName })
   ]);
 }
@@ -20040,6 +20175,10 @@ function startGame(nextType = gameType, requestedMode, options = {}) {
   updateFridayTheme();
   if (nextType === "hall") {
     showHallOfFame();
+    return;
+  }
+  if (nextType === "trade") {
+    showGlabTrade();
     return;
   }
   if (!hasRegisteredPlayerProfile()) {
@@ -21287,6 +21426,476 @@ async function renderHallOfFame() {
   }
 }
 
+function tradeCode() {
+  return `T${challengeCode()}`;
+}
+
+function tradeUrl(code) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("trade", String(code || "").toUpperCase());
+  return url.toString();
+}
+
+function isOpenTradeOpponent(value) {
+  return isOpenChallengeOpponent(value);
+}
+
+function tradePendingUntil(row) {
+  const created = Date.parse(row?.created_at || "");
+  return Number.isFinite(created) ? created + TRADE_PENDING_MS : 0;
+}
+
+function tradePendingExpired(row) {
+  if (row?.status !== "pending") return false;
+  const until = tradePendingUntil(row);
+  return Boolean(until && Date.now() >= until);
+}
+
+function tradeRole(row) {
+  const me = loadPlayerName();
+  if (row?.creator_device && row.creator_device === profileDeviceId()) return "creator";
+  if (row?.opponent_device && row.opponent_device === profileDeviceId()) return "opponent";
+  if (sameChallengeName(row?.opponent, me)) return "opponent";
+  if (sameChallengeName(row?.creator, me)) return "creator";
+  return "";
+}
+
+function preferredTradeOfferKind() {
+  if (remainingUnusedToday() >= 1) return "unused_today";
+  if (loadManualChallengeCredit() >= 1) return "challenge_bonus";
+  return "";
+}
+
+function tradeOfferLabel(row) {
+  const amount = Math.max(1, Number(row?.offer_amount) || 1);
+  if ((row?.offer_kind || "unused_today") === "challenge_bonus") {
+    return `${amount} G-Lab extra${amount === 1 ? "" : "s"}`;
+  }
+  return `${amount} unused extra${amount === 1 ? "" : "s"}`;
+}
+
+function renderTradeStatus(text = "") {
+  if (!tradeStatusEl) return;
+  tradeStatusEl.textContent = text || "";
+}
+
+function updateTradeWallet() {
+  if (tradeBonusCountEl) tradeBonusCountEl.textContent = String(loadManualChallengeCredit());
+  if (tradeUnusedCountEl) tradeUnusedCountEl.textContent = String(remainingUnusedToday());
+}
+
+function updateTradeBadge(rows = []) {
+  const button = typeButtons.find((item) => item.dataset.type === "trade");
+  if (!button) return;
+  const me = loadPlayerName();
+  const pending = (rows || []).filter((row) => row?.status === "pending" && !tradePendingExpired(row));
+  const waitingForReply = pending.filter((row) => tradeRole(row) === "creator").length;
+  const waitingForMe = pending.filter((row) => {
+    if (tradeRole(row) === "opponent") return true;
+    return isOpenTradeOpponent(row.opponent) && me && !sameChallengeName(row.creator, me);
+  }).length;
+  if (waitingForReply) button.dataset.sentCount = String(waitingForReply);
+  else delete button.dataset.sentCount;
+  if (waitingForMe) button.dataset.receivedCount = String(waitingForMe);
+  else delete button.dataset.receivedCount;
+}
+
+async function callSupabaseRpcJson(functionName, body = {}) {
+  if (!supabaseConfigured()) return null;
+  const response = await fetch(supabaseUrl(`rpc/${functionName}`), {
+    method: "POST",
+    headers: supabaseHeaders(),
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) return null;
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchTradeRows() {
+  const local = loadTradeSentStore().entries || [];
+  if (!supabaseConfigured()) return local;
+  const query = [
+    "select=code,day,status,creator,creator_device,opponent,opponent_device,offer_kind,offer_amount,created_at,accepted_at,cancelled_at",
+    "order=created_at.desc",
+    "limit=80"
+  ].join("&");
+  const response = await fetch(supabaseUrl(`${tradesTable()}?${query}`), { headers: supabaseHeaders() });
+  if (!response.ok) return local;
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows : local;
+}
+
+function myTradeRows(rows = []) {
+  const me = loadPlayerName();
+  return rows.filter((row) => {
+    if (tradeRole(row)) return true;
+    return me && (sameChallengeName(row.creator, me) || sameChallengeName(row.opponent, me));
+  });
+}
+
+function openTradeRows(rows = []) {
+  const me = loadPlayerName();
+  return rows.filter((row) => (
+    row?.status === "pending" &&
+    isOpenTradeOpponent(row.opponent) &&
+    !tradePendingExpired(row) &&
+    !sameChallengeName(row.creator, me)
+  ));
+}
+
+function showGlabTrade() {
+  if (!hasRegisteredPlayerProfile()) {
+    openProfileModal();
+    setProfileEditMode(true);
+    setProfileMessage("To use G-Lab Trade, choose a nickname and avatar.");
+    return;
+  }
+  gameType = "trade";
+  done = true;
+  activeChallenge = null;
+  competitiveIntro = false;
+  competitiveRunActive = false;
+  document.body.dataset.gameType = gameType;
+  document.body.dataset.competitiveLocked = "false";
+  document.body.dataset.competitiveIntro = "false";
+  document.body.dataset.challengePlaying = "false";
+  document.body.dataset.challengeFinished = "false";
+  boardsEl.innerHTML = "";
+  keyboardEl.innerHTML = "";
+  renderSolutionsPanel(false);
+  hideWordReveal();
+  nextLevelButton.hidden = true;
+  modeLabelEl.textContent = "Trade";
+  messageEl.textContent = "Send extra challenges to another player.";
+  tryCountEl.textContent = "0";
+  typeButtons.forEach((button) => button.classList.toggle("active", button.dataset.type === gameType));
+  updateModeButtons();
+  updateScoreDisplay();
+  if (tradePanelEl) tradePanelEl.hidden = false;
+  updateTradeWallet();
+  refreshGlabTrade().catch(() => {});
+}
+
+function tradeCard(row, options = {}) {
+  const card = document.createElement("article");
+  const expired = tradePendingExpired(row);
+  const status = expired && row.status === "pending" ? "expired" : (row.status || "pending");
+  card.className = `trade-card ${status}`;
+  const role = tradeRole(row);
+  const openOffer = isOpenTradeOpponent(row.opponent);
+  const top = document.createElement("div");
+  top.className = "trade-card-top";
+  const title = document.createElement("div");
+  title.className = "trade-card-title";
+  if (openOffer) {
+    title.textContent = role === "creator"
+      ? `Open offer · ${tradeOfferLabel(row)}`
+      : `${row.creator || "Player"} offers ${tradeOfferLabel(row)}`;
+  } else if (role === "creator") {
+    title.textContent = `To ${row.opponent || "player"} · ${tradeOfferLabel(row)}`;
+  } else {
+    title.textContent = `From ${row.creator || "Player"} · ${tradeOfferLabel(row)}`;
+  }
+  const meta = document.createElement("div");
+  meta.className = "trade-card-meta";
+  if (status === "pending") meta.textContent = `Expires in ${formatChallengeCountdown(Math.max(0, tradePendingUntil(row) - Date.now()))}`;
+  else if (status === "accepted") meta.textContent = "Accepted";
+  else if (status === "cancelled") meta.textContent = "Cancelled";
+  else if (status === "expired") meta.textContent = "Expired";
+  top.append(title, meta);
+  card.append(top);
+  const actions = document.createElement("div");
+  actions.className = "trade-card-actions";
+  if (status === "pending" && role === "creator") {
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "trade-cancel-button";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => cancelGlabTrade(row).catch(() => renderTradeStatus("Cancelling the trade failed.")));
+    actions.append(cancel);
+    if (openOffer) {
+      const share = document.createElement("button");
+      share.type = "button";
+      share.textContent = "Share";
+      share.addEventListener("click", () => shareGlabTrade(row.code).catch(() => renderTradeStatus("Sharing is currently unavailable.")));
+      actions.append(share);
+    }
+  }
+  if (status === "pending" && (role === "opponent" || (options.claimable && openOffer && role !== "creator"))) {
+    const accept = document.createElement("button");
+    accept.type = "button";
+    accept.textContent = options.claimable ? "Claim" : "Accept";
+    accept.addEventListener("click", () => acceptGlabTrade(row).catch(() => renderTradeStatus("Accepting the trade failed.")));
+    actions.append(accept);
+  }
+  if (actions.childNodes.length) card.append(actions);
+  return card;
+}
+
+function renderTradeBoard(rows = []) {
+  if (!tradeBoardEl) return;
+  tradeBoardEl.innerHTML = "";
+  const openRows = openTradeRows(rows);
+  if (!openRows.length) {
+    const empty = document.createElement("div");
+    empty.className = "trade-empty";
+    empty.textContent = supabaseConfigured() ? "No open offers right now." : "Trades require online play.";
+    tradeBoardEl.append(empty);
+    return;
+  }
+  openRows.slice(0, 12).forEach((row) => tradeBoardEl.append(tradeCard(row, { claimable: true })));
+}
+
+function renderTradeHistory(rows = []) {
+  if (!tradeHistoryEl) return;
+  tradeHistoryEl.innerHTML = "";
+  const mine = myTradeRows(rows)
+    .filter((row) => row.status !== "cancelled" || tradeRole(row) === "creator")
+    .slice(0, 16);
+  document.body.dataset.tradeCards = mine.length || openTradeRows(rows).length ? "true" : "false";
+  if (!mine.length) {
+    const empty = document.createElement("div");
+    empty.className = "trade-empty";
+    empty.textContent = "Your sent and received trades will show here.";
+    tradeHistoryEl.append(empty);
+    return;
+  }
+  mine.forEach((row) => tradeHistoryEl.append(tradeCard(row)));
+}
+
+async function refreshGlabTrade({ quiet = false } = {}) {
+  updateTradeWallet();
+  const rows = await fetchTradeRows().catch(() => loadTradeSentStore().entries || []);
+  const finalized = await finalizeExpiredTrades(rows);
+  finalized.forEach((row) => {
+    if (tradeRole(row) === "creator") rememberTradeSent(row);
+  });
+  updateTradeBadge(finalized);
+  if (gameType === "trade" || !quiet) {
+    renderTradeBoard(finalized);
+    renderTradeHistory(finalized);
+  }
+  if (!quiet && gameType === "trade") {
+    updateTradeWallet();
+  }
+  return finalized;
+}
+
+async function finalizeExpiredTrades(rows = []) {
+  const next = [];
+  for (const row of rows) {
+    if (row?.status === "pending" && tradePendingExpired(row) && tradeRole(row) === "creator") {
+      const cancelled = await cancelGlabTrade(row, { silent: true, reason: "expired" }).catch(() => null);
+      next.push(cancelled || { ...row, status: "expired" });
+    } else {
+      next.push(row);
+    }
+  }
+  return next;
+}
+
+async function createGlabTrade({ opponent = "", open = false } = {}) {
+  renderTradeStatus(open ? "Posting open offer..." : "Sending extra...");
+  if (!supabaseConfigured()) {
+    renderTradeStatus("Trades require active Supabase.");
+    return false;
+  }
+  const nickname = loadPlayerName();
+  if (!nickname || !hasRegisteredPlayerProfile()) {
+    renderTradeStatus("Edit your profile before sending an extra.");
+    openProfileModal();
+    return false;
+  }
+  const kind = preferredTradeOfferKind();
+  if (!kind) {
+    renderTradeStatus("You have no unused extras or G-Lab extras to send.");
+    return false;
+  }
+  const pendingMine = (await fetchTradeRows().catch(() => [])).filter((row) => (
+    row.status === "pending" && tradeRole(row) === "creator" && !tradePendingExpired(row)
+  ));
+  if (pendingMine.length >= 5) {
+    renderTradeStatus("You already have 5 pending trades.");
+    return false;
+  }
+  let cleanOpponent = open ? "" : cleanChallengeName(opponent);
+  if (!open && !cleanOpponent) {
+    renderTradeStatus("Choose a registered player.");
+    return false;
+  }
+  if (cleanOpponent && sameChallengeName(nickname, cleanOpponent)) {
+    renderTradeStatus("You cannot trade with yourself.");
+    return false;
+  }
+  const code = tradeCode();
+  const payload = {
+    p_code: code,
+    p_creator: nickname,
+    p_creator_device: profileDeviceId(),
+    p_opponent: cleanOpponent,
+    p_offer_kind: kind,
+    p_offer_amount: 1
+  };
+  let row = null;
+  const rpc = await callSupabaseRpcJson("create_glab_trade", payload);
+  if (rpc?.ok && rpc.trade) {
+    row = rpc.trade;
+  } else if (rpc && rpc.ok === false) {
+    const errors = {
+      not_enough_bonus: "Not enough G-Lab extras.",
+      self: "You cannot trade with yourself.",
+      player_missing: "Your profile is not online yet.",
+      invalid_amount: "That extra amount is not allowed."
+    };
+    renderTradeStatus(errors[rpc.error] || "Sending the extra failed.");
+    return false;
+  } else {
+    const response = await fetch(supabaseUrl(tradesTable()), {
+      method: "POST",
+      headers: supabaseHeaders({ Prefer: "return=representation" }),
+      body: JSON.stringify({
+        code,
+        day: todayId(),
+        creator: nickname,
+        creator_device: profileDeviceId(),
+        opponent: cleanOpponent || null,
+        status: "pending",
+        offer_kind: kind,
+        offer_amount: 1
+      })
+    });
+    if (!response.ok) {
+      renderTradeStatus("Sending the extra failed. Run sql/g-lab-trade.sql in Supabase if this is the first Trade use.");
+      return false;
+    }
+    const created = await response.json();
+    row = Array.isArray(created) ? created[0] : created;
+    if (kind === "challenge_bonus") {
+      await persistManualChallengeCredit(loadManualChallengeCredit() - 1);
+    }
+  }
+  if (kind === "challenge_bonus") {
+    await refreshManualChallengeCredit().catch(() => loadManualChallengeCredit());
+  }
+  rememberTradeSent(row || { code, offer_kind: kind, offer_amount: 1, status: "pending", opponent: cleanOpponent, day: todayId(), created_at: new Date().toISOString() });
+  updateChallengeQuota();
+  renderTradeStatus(open
+    ? "Open offer posted. Anyone can claim it."
+    : `Extra sent to ${cleanOpponent}. Waiting for accept.`);
+  await refreshGlabTrade();
+  return true;
+}
+
+async function acceptGlabTrade(row) {
+  if (!row?.code) return false;
+  if (!hasRegisteredPlayerProfile()) {
+    openProfileModal();
+    setProfileEditMode(true);
+    setProfileMessage("To accept a trade, choose a nickname and avatar.");
+    return false;
+  }
+  const nickname = loadPlayerName();
+  if (sameChallengeName(row.creator, nickname)) {
+    renderTradeStatus("You cannot claim your own offer.");
+    return false;
+  }
+  renderTradeStatus("Accepting extra...");
+  const rpc = await callSupabaseRpcJson("accept_glab_trade", {
+    p_code: row.code,
+    p_opponent: nickname,
+    p_opponent_device: profileDeviceId()
+  });
+  if (rpc?.ok) {
+    await refreshManualChallengeCredit().catch(() => persistManualChallengeCredit(loadManualChallengeCredit() + 1));
+  } else if (rpc && rpc.ok === false) {
+    const errors = {
+      not_pending: "This offer is no longer available.",
+      self: "You cannot claim your own offer.",
+      wrong_opponent: "This extra was sent to another player.",
+      player_missing: "Your profile is not online yet."
+    };
+    renderTradeStatus(errors[rpc.error] || "This offer is no longer available.");
+    await refreshGlabTrade();
+    return false;
+  } else {
+    const response = await fetch(supabaseUrl(`${tradesTable()}?code=eq.${encodeURIComponent(row.code)}&status=eq.pending`), {
+      method: "PATCH",
+      headers: supabaseHeaders({ Prefer: "return=representation" }),
+      body: JSON.stringify({
+        opponent: nickname,
+        opponent_device: profileDeviceId(),
+        status: "accepted",
+        accepted_at: new Date().toISOString()
+      })
+    });
+    if (!response.ok) {
+      renderTradeStatus("This offer is no longer available.");
+      await refreshGlabTrade();
+      return false;
+    }
+    await persistManualChallengeCredit(loadManualChallengeCredit() + Math.max(1, Number(row.offer_amount) || 1));
+  }
+  renderTradeStatus(`You received ${tradeOfferLabel(row)}.`);
+  await refreshGlabTrade();
+  return true;
+}
+
+async function cancelGlabTrade(row, options = {}) {
+  if (!row?.code) return null;
+  const rpc = await callSupabaseRpcJson("cancel_glab_trade", {
+    p_code: row.code,
+    p_actor_device: profileDeviceId()
+  });
+  let next = rpc?.trade || null;
+  if (!rpc?.ok) {
+    await patchSupabaseRows(`${tradesTable()}?code=eq.${encodeURIComponent(row.code)}`, {
+      status: options.reason === "expired" ? "expired" : "cancelled",
+      cancelled_at: new Date().toISOString()
+    });
+    if ((row.offer_kind || "unused_today") === "challenge_bonus" && tradeRole(row) === "creator") {
+      await persistManualChallengeCredit(loadManualChallengeCredit() + Math.max(1, Number(row.offer_amount) || 1));
+    }
+    next = { ...row, status: options.reason === "expired" ? "expired" : "cancelled" };
+  } else if ((row.offer_kind || "unused_today") === "challenge_bonus") {
+    await refreshManualChallengeCredit().catch(() => {});
+  }
+  rememberTradeSent(next);
+  if (!options.silent) {
+    renderTradeStatus(options.reason === "expired" ? "Offer expired. Extra returned." : "Trade cancelled. Extra returned.");
+    await refreshGlabTrade();
+  }
+  updateChallengeQuota();
+  return next;
+}
+
+async function shareGlabTrade(code) {
+  const text = `Petko G-Lab Trade: ${code}\n${tradeUrl(code)}`;
+  if (navigator.share) {
+    await navigator.share({ text, url: tradeUrl(code) });
+    return;
+  }
+  await navigator.clipboard.writeText(text);
+  renderTradeStatus("Trade link copied.");
+}
+
+async function bankUnusedExtras() {
+  if (remainingUnusedToday() < TRADE_BANK_UNUSED_COST) {
+    renderTradeStatus(`Banking needs ${TRADE_BANK_UNUSED_COST} unused extras today.`);
+    return false;
+  }
+  addTradeBankSpend(TRADE_BANK_UNUSED_COST);
+  const next = loadManualChallengeCredit() + TRADE_BANK_BONUS_GAIN;
+  await persistManualChallengeCredit(next);
+  renderTradeStatus("Banked 2 unused extras into 1 G-Lab extra.");
+  updateChallengeQuota();
+  updateTradeWallet();
+  return true;
+}
+
 function showHallOfFame() {
   gameType = "hall";
   done = true;
@@ -21513,6 +22122,10 @@ typeButtons.forEach((button) => {
       exitChallengeToLobby();
       return;
     }
+    if (nextType === "trade") {
+      showGlabTrade();
+      return;
+    }
     if (nextType === "competitive") {
       showCompetitiveIntro();
       return;
@@ -21686,20 +22299,30 @@ async function submitChallengePicker(event) {
   if (!challengePickerSelected || challengePickerBusy) return;
   challengePickerBusy = true;
   const selectedOpponent = challengePickerSelected;
-  if (challengePickerMessage) challengePickerMessage.textContent = "Sending challenge...";
+  const sendingTrade = challengePickerMode === "trade";
+  if (challengePickerMessage) {
+    challengePickerMessage.textContent = sendingTrade ? "Sending extra..." : "Sending challenge...";
+  }
   if (challengePickerSubmit) challengePickerSubmit.disabled = true;
   try {
-    const created = await createChallenge(selectedOpponent);
+    const created = sendingTrade
+      ? await createGlabTrade({ opponent: selectedOpponent, open: false })
+      : await createChallenge(selectedOpponent);
     if (created) {
       closeChallengePicker();
     } else {
-      if (challengePickerMessage) challengePickerMessage.textContent = challengeStatusEl?.textContent || "Challenge was not sent.";
+      if (challengePickerMessage) {
+        challengePickerMessage.textContent = sendingTrade
+          ? (tradeStatusEl?.textContent || "Extra was not sent.")
+          : (challengeStatusEl?.textContent || "Challenge was not sent.");
+      }
     }
   } catch (error) {
-    const message = error?.message || "Sending the challenge failed.";
+    const message = error?.message || (sendingTrade ? "Sending the extra failed." : "Sending the challenge failed.");
     if (challengePickerMessage) challengePickerMessage.textContent = message;
     closeChallengePicker();
-    renderChallengePanel(message);
+    if (sendingTrade) renderTradeStatus(message);
+    else renderChallengePanel(message);
   } finally {
     challengePickerBusy = false;
     if (challengePickerModal?.hidden === false && challengePickerSubmit) {
@@ -21731,6 +22354,31 @@ if (checkChallengeButton) {
 if (refreshHallButton) {
   refreshHallButton.addEventListener("click", () => {
     renderHallOfFame();
+  });
+}
+
+if (tradeBankButton) {
+  tradeBankButton.addEventListener("click", () => {
+    bankUnusedExtras().catch(() => renderTradeStatus("Banking extras failed."));
+  });
+}
+
+if (tradeSendButton) {
+  tradeSendButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    openChallengePicker("trade").catch((error) => renderTradeStatus(error?.message || "Opening the player picker failed."));
+  });
+}
+
+if (tradeOpenButton) {
+  tradeOpenButton.addEventListener("click", () => {
+    createGlabTrade({ open: true }).catch(() => renderTradeStatus("Posting the open offer failed."));
+  });
+}
+
+if (refreshTradeButton) {
+  refreshTradeButton.addEventListener("click", () => {
+    refreshGlabTrade().catch(() => renderTradeStatus("Refreshing trades failed."));
   });
 }
 
@@ -22122,6 +22770,7 @@ document.addEventListener("visibilitychange", () => {
     updateChallengeQuota();
     maybeShowWeekendWitchOffer();
     syncChallengeState({ force: true }).catch(() => {});
+    if (gameType === "trade") refreshGlabTrade({ quiet: true }).catch(() => {});
   }
 });
 window.addEventListener("focus", () => {
@@ -22134,6 +22783,7 @@ setInterval(updateCompetitiveCountdown, 1000);
 setInterval(notifyDailyEvents, 600000);
 setInterval(() => {
   syncChallengeState().catch(() => {});
+  if (gameType === "trade") refreshGlabTrade({ quiet: true }).catch(() => {});
 }, CHALLENGE_SYNC_INTERVAL_MS);
 setInterval(() => {
   syncWeekendWitchAvatarState();
@@ -22155,8 +22805,14 @@ async function bootPetkoApp() {
   syncWeekendWitchAvatarState();
   weekendWitchChallengeBonus();
   refreshManualChallengeCredit().catch(() => {});
-  const incomingChallengeCode = new URLSearchParams(window.location.search).get("challenge");
-  if (incomingChallengeCode) {
+  const params = new URLSearchParams(window.location.search);
+  const incomingChallengeCode = params.get("challenge");
+  const incomingTradeCode = params.get("trade");
+  if (incomingTradeCode) {
+    startGame("trade");
+    renderTradeStatus(`Open offer ${incomingTradeCode.toUpperCase()} is waiting. Claim it from the board if it is still available.`);
+    refreshGlabTrade().catch(() => {});
+  } else if (incomingChallengeCode) {
     startGame("challenge");
   if (challengeCodeInput) challengeCodeInput.value = incomingChallengeCode.toUpperCase();
   renderChallengePanel(`You have been invited to challenge ${incomingChallengeCode.toUpperCase()}. Accept it, then play when you like.`);

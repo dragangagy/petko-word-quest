@@ -134,10 +134,13 @@ body[data-friday="true"] .exit-button,
 body[data-friday="true"] .annual-top-score,
 body[data-friday="true"] .try-button,
 body[data-friday="true"] .challenge-panel,
+body[data-friday="true"] .trade-panel,
 body[data-friday="true"] .challenge-card,
+body[data-friday="true"] .trade-card,
 body[data-friday="true"] .challenge-player-select,
 body[data-friday="true"] .challenge-player-menu,
-body[data-friday="true"] .challenge-actions button {
+body[data-friday="true"] .challenge-actions button,
+body[data-friday="true"] .trade-actions button {
   border-color: rgba(255, 228, 92, 0.5);
   box-shadow: inset 0 0 16px rgba(255, 228, 92, 0.09), 0 0 20px rgba(255, 215, 0, 0.2);
 }
@@ -1540,7 +1543,7 @@ body[data-game-type="normal"] .status-panel p {
 }
 
 .game-type-row {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
 }
 
 .mode-row {
@@ -1627,6 +1630,8 @@ body[data-game-type="normal"] .mode-row,
 body[data-game-type="normal"] .listing-panel,
 body[data-game-type="challenge"] .mode-row,
 body[data-game-type="challenge"] .listing-panel,
+body[data-game-type="trade"] .mode-row,
+body[data-game-type="trade"] .listing-panel,
 body[data-game-type="hall"] .mode-row,
 body[data-game-type="hall"] .listing-panel {
   display: none;
@@ -1663,6 +1668,7 @@ body[data-game-type="hall"] .listing-panel {
 
 body[data-game-type="competitive"] .normal-stats,
 body[data-game-type="challenge"] .normal-stats,
+body[data-game-type="trade"] .normal-stats,
 body[data-game-type="hall"] .normal-stats {
   display: none;
 }
@@ -1679,6 +1685,14 @@ body:not([data-game-type="hall"]) .hall-panel {
   display: none;
 }
 
+body:not([data-game-type="trade"]) .trade-panel {
+  display: none;
+}
+
+.trade-panel[hidden] {
+  display: none;
+}
+
 body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .boards,
 body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .keyboard,
 body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .word-reveal {
@@ -1686,6 +1700,12 @@ body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .word-reve
 }
 
 body[data-game-type="challenge"][data-challenge-finished="true"] .keyboard {
+  display: none;
+}
+
+body[data-game-type="trade"] .boards,
+body[data-game-type="trade"] .keyboard,
+body[data-game-type="trade"] .word-reveal {
   display: none;
 }
 
@@ -1708,20 +1728,23 @@ body[data-game-type="challenge"][data-challenge-finished="true"] .keyboard {
 }
 
 body[data-game-type="competitive"][data-competitive-intro="true"] .app-shell,
-body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .app-shell {
+body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .app-shell,
+body[data-game-type="trade"] .app-shell {
   height: 100svh;
   overflow: hidden;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
 }
 
-body[data-game-type="challenge"][data-challenge-cards="true"]:not([data-challenge-playing="true"]) .app-shell {
+body[data-game-type="challenge"][data-challenge-cards="true"]:not([data-challenge-playing="true"]) .app-shell,
+body[data-game-type="trade"][data-trade-cards="true"] .app-shell {
   height: auto;
   min-height: 100svh;
   overflow-y: auto;
 }
 
 body[data-game-type="competitive"][data-competitive-intro="true"] .idle-petko,
-body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko {
+body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko,
+body[data-game-type="trade"] .idle-petko {
   display: grid;
   flex: 1 1 auto;
   height: auto;
@@ -1730,12 +1753,14 @@ body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petk
   padding-top: 0;
 }
 
-body[data-game-type="challenge"][data-challenge-cards="true"] .idle-petko {
+body[data-game-type="challenge"][data-challenge-cards="true"] .idle-petko,
+body[data-game-type="trade"][data-trade-cards="true"] .idle-petko {
   display: none;
 }
 
 body[data-game-type="competitive"][data-competitive-intro="true"] .idle-petko-competitive,
-body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko-challenge {
+body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko-challenge,
+body[data-game-type="trade"] .idle-petko-challenge {
   display: block;
   width: auto;
   height: 100%;
@@ -1743,7 +1768,8 @@ body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petk
   max-height: 100%;
 }
 
-body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko-challenge {
+body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko-challenge,
+body[data-game-type="trade"] .idle-petko-challenge {
   max-height: min(100%, 260px);
 }
 
@@ -2823,6 +2849,188 @@ body[data-game-type="competitive"][data-competitive-intro="true"] .idle-petko-co
   color: #f87171;
 }
 
+.trade-panel {
+  padding: 6px;
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.78);
+  color: #ffffff;
+}
+
+.trade-copy {
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.trade-copy:empty {
+  display: none;
+}
+
+.trade-wallet {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.trade-wallet-item {
+  min-height: 46px;
+  display: grid;
+  place-items: center;
+  padding: 6px 8px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 8px;
+  background: rgba(2, 8, 23, 0.38);
+  text-align: center;
+}
+
+.trade-wallet-item span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.trade-wallet-item strong {
+  color: var(--gold);
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.trade-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+}
+
+.trade-actions button,
+.trade-board-head button {
+  min-width: 0;
+  height: 36px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 7px;
+  background: #1e293b;
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.trade-hint {
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.trade-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.trade-board-head button {
+  width: auto;
+  min-width: 72px;
+  height: 28px;
+  padding: 0 10px;
+}
+
+.trade-board,
+.trade-history {
+  display: grid;
+  gap: 6px;
+}
+
+.trade-empty {
+  padding: 10px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.trade-card {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.74);
+}
+
+.trade-card.pending {
+  border-color: rgba(255, 215, 0, 0.62);
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.24), rgba(30, 24, 6, 0.7) 44%, rgba(15, 23, 42, 0.8));
+}
+
+.trade-card.accepted {
+  border-color: rgba(34, 197, 94, 0.54);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(15, 23, 42, 0.82) 46%, rgba(34, 197, 94, 0.12));
+}
+
+.trade-card.cancelled,
+.trade-card.expired {
+  border-color: rgba(148, 163, 184, 0.28);
+  opacity: 0.78;
+}
+
+.trade-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.trade-card-title {
+  color: #ffffff;
+}
+
+.trade-card-meta {
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.trade-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.trade-card-actions button {
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.72);
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.trade-card.pending .trade-card-actions button {
+  border-color: rgba(255, 215, 0, 0.46);
+  color: var(--gold);
+}
+
+.trade-card-actions .trade-cancel-button,
+.trade-card-actions .trade-decline-button {
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #f87171;
+}
+
 .hall-panel {
   padding: 9px;
   display: grid;
@@ -3040,7 +3248,7 @@ body[data-game-type="competitive"][data-competitive-intro="true"] .idle-petko-co
 }
 
 .game-type-row .type-button {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .medal-value {
@@ -3807,7 +4015,8 @@ body[data-friday="true"] .tile.absent {
   }
 
   body[data-game-type="competitive"][data-competitive-intro="true"] .app-shell,
-  body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .app-shell {
+  body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .app-shell,
+  body[data-game-type="trade"] .app-shell {
     padding-bottom: max(7px, env(safe-area-inset-bottom));
   }
 
@@ -3816,13 +4025,19 @@ body[data-friday="true"] .tile.absent {
   }
 
   body[data-game-type="competitive"][data-competitive-intro="true"] .idle-petko,
-  body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko {
+  body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko,
+  body[data-game-type="trade"] .idle-petko {
     height: auto;
     min-height: 0;
   }
 
   .status-panel {
     padding: 7px 9px;
+  }
+
+  .game-type-row .type-button {
+    font-size: 10px;
+    padding: 0 1px;
   }
 
   .type-button,
@@ -3871,7 +4086,8 @@ body[data-friday="true"] .tile.absent {
   }
 
   body[data-game-type="competitive"][data-competitive-intro="true"] .app-shell,
-  body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .app-shell {
+  body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .app-shell,
+  body[data-game-type="trade"] .app-shell {
     padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
 
@@ -3880,7 +4096,8 @@ body[data-friday="true"] .tile.absent {
   }
 
   body[data-game-type="competitive"][data-competitive-intro="true"] .idle-petko,
-  body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko {
+  body[data-game-type="challenge"]:not([data-challenge-playing="true"]) .idle-petko,
+  body[data-game-type="trade"] .idle-petko {
     height: auto;
     min-height: 0;
   }

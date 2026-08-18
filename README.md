@@ -2,7 +2,7 @@
 
 Mobile-first English 5-letter word game for the US market.
 
-Independent from the Serbian Petko app. Same gameplay systems (Classic, Competitive, Challenge, Medals), new English word list, QWERTY keyboard, and a separate Supabase project.
+Independent from the Serbian Petko app. Same gameplay systems (Classic, Competitive, Challenge, Trade, Medals), new English word list, QWERTY keyboard, and a separate Supabase project.
 
 ## GitHub Pages
 
@@ -22,7 +22,7 @@ Required files:
 Create a **new** Supabase project for Petko Word Quest. Do not reuse the Serbian Petko project.
 
 1. Run `supabase-schema.sql` in the SQL editor.
-2. Run scheduled SQL helpers under `sql/` as needed.
+2. Run scheduled SQL helpers under `sql/` as needed, including `sql/g-lab-trade.sql` for the extra-challenge marketplace.
 3. Seed English words into `public.words` (generate from the `WORDS` list in `app.js`, or load online words after the table is ready).
 4. Set these values in `app.js`:
 
