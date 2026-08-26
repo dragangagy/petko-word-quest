@@ -15072,7 +15072,7 @@ const PROFILE_UNLOCK_GROUPS = {
 };
 const PLAYER_AVATAR_CACHE = new Map();
 const SUPABASE_CONFIG = {
-  url: "http://192.168.1.6:8000",
+  url: "http://192.168.1.6:3000",
   anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InBldGtvLWhhIiwiaWF0IjoxNzg3NzQ0OTAyLCJleHAiOjIxMDMxMDQ5MDJ9.89GdhPNVZL1yXM_to4MBvF_M6xCwWMM97YwS56VQAaw",
   restPrefix: "",
   table: "scores",
