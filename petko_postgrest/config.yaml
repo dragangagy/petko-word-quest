@@ -1,5 +1,5 @@
 name: Petko PostgREST
-version: "1.0.8"
+version: "1.1.0"
 slug: petko_postgrest
 description: Supabase-compatible REST API for Petko Word Quest
 url: https://github.com/dragangagy/petko-word-quest
@@ -9,10 +9,6 @@ startup: application
 boot: auto
 init: false
 host_network: true
-ports:
-  3000/tcp: 8000
-ports_description:
-  3000/tcp: PostgREST API (Petko)
 options:
   postgres_host: 127.0.0.1
   postgres_password: homeassistant
