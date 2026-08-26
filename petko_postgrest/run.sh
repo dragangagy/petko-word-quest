@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv bashio
+﻿#!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
 
 PG_HOST="$(bashio::config 'postgres_host')"
@@ -13,4 +13,5 @@ export PGRST_SERVER_PORT="3000"
 export PGRST_SERVER_HOST="0.0.0.0"
 
 bashio::log.info "Starting PostgREST -> ${PG_HOST}:5432"
+bashio::log.info "PGRST_DB_URI postgresql://postgres:***@${PG_HOST}:5432/postgres"
 exec /usr/local/bin/postgrest
