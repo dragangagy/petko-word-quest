@@ -8,12 +8,13 @@ arch:
 startup: application
 boot: auto
 init: false
+host_network: true
 ports:
   3000/tcp: 8000
 ports_description:
   3000/tcp: PostgREST API (Petko)
 options:
-  postgres_host: db21ed7f-postgres-latest
+  postgres_host: 127.0.0.1
   postgres_password: homeassistant
   jwt_secret: petko-local-jwt-secret-at-least-32-characters
 schema:
