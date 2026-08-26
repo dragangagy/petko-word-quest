@@ -10,6 +10,7 @@ export PGRST_DB_SCHEMAS="public"
 export PGRST_DB_ANON_ROLE="anon"
 export PGRST_JWT_SECRET="${JWT_SECRET}"
 export PGRST_SERVER_PORT="3000"
+export PGRST_SERVER_HOST="0.0.0.0"
 
 bashio::log.info "Starting PostgREST -> ${PG_HOST}:5432"
 exec /usr/local/bin/postgrest
