@@ -4,7 +4,7 @@ FROM ${BUILD_FROM}
 ARG POSTGREST_VERSION=12.2.3
 
 RUN \
-    apk add --no-cache curl xz \
+    apk add --no-cache curl xz postgresql16-client \
     && curl -fsSL "https://github.com/PostgREST/postgrest/releases/download/v${POSTGREST_VERSION}/postgrest-v${POSTGREST_VERSION}-linux-static-x64.tar.xz" \
       | tar -xJ -C /usr/local/bin \
     && chmod +x /usr/local/bin/postgrest \
