@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=6">
     <link rel="icon" href="app-icon-store.png" type="image/png">
     <link rel="apple-touch-icon" href="app-icon-store.png">
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=7">
   </head>
   <body>
     <div class="petko-splash" id="petkoSplash" role="dialog" aria-label="Petko Word Quest" aria-modal="true">
@@ -325,6 +325,13 @@
       </article>
     </div>
 
-  <script src="app.js?v=6"></script>
+    <div class="connection-overlay" id="connectionOverlay" hidden>
+      <article class="connection-overlay-card connection-overlay-card--text-only" role="alertdialog" aria-modal="true" aria-labelledby="connectionOverlayMessage">
+        <p class="connection-overlay-message" id="connectionOverlayMessage"></p>
+        <button class="connection-overlay-retry" id="connectionOverlayRetry" type="button">Try again</button>
+      </article>
+    </div>
+
+  <script src="app.js?v=7"></script>
   </body>
 </html>
